@@ -1,0 +1,22 @@
+{
+  "name": "kumo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first confidential cross-chain USDC payments. QVAC + MagicBlock PER + LI.FI + Solana durable nonces.",
+  "scripts": {
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "anchor:build": "cd programs/intent-receipt && anchor build",
+    "anchor:test": "cd programs/intent-receipt && anchor test --skip-deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "prettier": "^3.3.3"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  }
+}

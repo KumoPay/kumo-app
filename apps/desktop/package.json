@@ -1,0 +1,37 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@lifi/sdk": "3.15.3",
+    "@kumo/anchor-client": "workspace:*",
+    "@kumo/shared": "workspace:*",
+    "@solana/web3.js": "^1.95.4",
+    "bs58": "^6.0.0",
+    "next": "^15.0.0",
+    "openai": "^4.67.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.0"
+  }
+}

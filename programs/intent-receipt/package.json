@@ -1,0 +1,21 @@
+{
+  "name": "@kumo/intent-receipt-tests",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'Run: anchor build' && exit 0",
+    "test": "vitest run",
+    "lint": "echo 'no lint' && exit 0"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/web3.js": "^1.95.4",
+    "@kumo/anchor-client": "workspace:*",
+    "litesvm": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.0"
+  }
+}
