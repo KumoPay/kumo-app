@@ -19,6 +19,14 @@ export const dynamic = "force-dynamic"
 
 const SOLANA_RPC =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"
+const MAGICBLOCK_TEE_RPC =
+  process.env.NEXT_PUBLIC_MAGICBLOCK_TEE_RPC ?? "https://devnet-tee.magicblock.app"
+
+function rpcFor(sendTo: "base" | "ephemeral"): string {
+  if (sendTo === "base") return SOLANA_RPC
+  const token = process.env.MAGICBLOCK_SESSION_KEY ?? ""
+  return `${MAGICBLOCK_TEE_RPC}?token=${encodeURIComponent(token)}`
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -52,7 +60,7 @@ export async function POST(req: NextRequest) {
     })
 
     const txBytes = Buffer.from(built.transactionBase64, "base64")
-    const conn = new Connection(SOLANA_RPC, "confirmed")
+    const conn = new Connection(rpcFor(built.sendTo), "confirmed")
 
     let signature: string
     if (built.version === "v0") {
