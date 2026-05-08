@@ -2,62 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
-
 html, body {
-  background: #070809;
-  color: #f3efe5;
+  background: #FAFCFF;
+  color: #0B1020;
+  font-family: "Nunito Sans", system-ui, sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* CRT scanline overlay for the demo drama */
-.crt::before {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.02) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  z-index: 9999;
-  mix-blend-mode: overlay;
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Soft shadows used throughout the design */
+.softshadow {
+  box-shadow: 0 1px 2px rgba(11,16,32,0.05), 0 8px 24px rgba(11,16,32,0.06);
+}
+.softshadow-sm {
+  box-shadow: 0 1px 2px rgba(11,16,32,0.06);
 }
 
-/* Subtle vignette */
-body::after {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
-  z-index: 9998;
+.card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(11,16,32,0.04), 0 8px 20px rgba(11,16,32,0.05);
 }
 
-/* Field rule */
-.rule {
-  border-top: 1px solid #27241e;
-}
+/* Press feedback */
+.pressable { transition: transform 0.12s ease-out; }
+.pressable:active { transform: scale(0.98); }
 
-/* Selection */
-::selection {
-  background: #ff5f1f;
-  color: #070809;
+/* Top nav */
+.topnav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  height: 84px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 36px;
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border-bottom: 0.5px solid rgba(183,241,255,1);
 }
+.topnav__brand {
+  display: flex; align-items: center; gap: 12px;
+  font-weight: 800; font-size: 20px; color: #0B1020; text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.topnav__links { display: flex; gap: 6px; font-size: 14px; font-weight: 700; }
+.topnav__links a {
+  padding: 10px 18px; color: #0B1020; opacity: 0.6;
+  text-decoration: none; border-radius: 999px;
+  transition: opacity 0.15s, background 0.15s;
+}
+.topnav__links a:hover { opacity: 1; background: rgba(183,241,255,0.5); }
+.topnav__links a.active { opacity: 1; background: #B7F1FF; }
+.topnav__cta { display: flex; align-items: center; gap: 12px; }
+.topnav__net {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700; color: #0B1020;
+  background: #B7F1FF; padding: 8px 14px; border-radius: 999px;
+}
+.topnav__net .dot { width: 7px; height: 7px; border-radius: 9999px; background: #0B1020; }
+.topnav__connect {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #7FE8FF; color: #0B1020;
+  padding: 11px 22px; border-radius: 999px;
+  font-weight: 800; font-size: 14px; text-decoration: none;
+  transition: transform 0.12s ease-out;
+}
+.topnav__connect:active { transform: scale(0.98); }
+.has-topnav { padding-top: 84px; }
 
-/* Custom checkbox-ish badge */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.15rem 0.55rem;
-  border: 1px solid #27241e;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+/* Override wallet-adapter-react-ui button to match Kumo styling */
+.kumo-wallet-btn .wallet-adapter-button {
+  width: 100%;
+  height: 52px;
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: #7FE8FF;
+  color: #0B1020;
+  font-family: "Nunito Sans", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 6px 18px rgba(127,232,255,0.45);
+  transition: transform 0.12s ease-out, background 0.15s;
+  justify-content: center;
+}
+.kumo-wallet-btn .wallet-adapter-button:hover { background: #B7F1FF; }
+.kumo-wallet-btn .wallet-adapter-button:active { transform: scale(0.98); }
+.kumo-wallet-btn .wallet-adapter-button-trigger { background: #7FE8FF; }
+.kumo-wallet-btn .wallet-adapter-button:not([disabled]):hover { background: #B7F1FF; }
+.kumo-wallet-btn .wallet-adapter-button-start-icon { display: none; }
+
+::selection { background: #7FE8FF; color: #0B1020; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #FAFCFF; }
+::-webkit-scrollbar-thumb {
+  background: #C7B5FF;
+  border: 2px solid #FAFCFF;
+  border-radius: 999px;
 }

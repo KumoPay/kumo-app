@@ -1,393 +1,261 @@
-"use client"
+import Image from "next/image"
+import Link from "next/link"
+import { KumoMascot, KumoMark } from "@/components/kumo-mascot"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { PaymentIntent } from "@kumo/shared"
+const HOW_STEPS: Array<[string, string, string]> = [
+  ["01", "Connect", "Tap into Phantom, Solflare, or Backpack via Saga Seed Vault."],
+  ["02", "Speak intent", "Type a payment in plain words. On-device AI parses it."],
+  ["03", "Sign offline", "Face ID seals a durable-nonce transaction. No RPC needed."],
+  ["04", "Wait with Kumo", "Airplane mode? Kumo naps with your queued payment."],
+  ["05", "Delivered", "Reconnect and Kumo settles confidentially via MagicBlock."],
+]
 
-/**
- * Kumo — single-page state machine.
- *
- * STATES:
- *   idle      → no intent yet
- *   parsing   → calling /api/parse-intent (QVAC, on-device)
- *   parsed    → intent visible, ready to sign
- *   signing   → calling /api/build-tx (offline, durable nonce)
- *   signed    → tx in localStorage, waiting for reconnect
- *   broadcasting → calling /api/broadcast (MagicBlock PER)
- *   settled   → done; show signature + session id
- *
- * Network status (online/offline) is read from navigator.onLine
- * and updated via 'online'/'offline' events. The status indicator
- * turning red the moment Wi-Fi disconnects is the demo's drama.
- */
-
-type Phase = "idle" | "parsing" | "parsed" | "signing" | "signed" | "broadcasting" | "settled" | "error"
-
-const DEMO_RECIPIENT_MAP: Record<string, string> = {
-  // Resolves friendly names → Solana pubkey. In production this is encrypted
-  // contact storage. For the demo we ship two devnet pubkeys.
-  maria: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
-  javier: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
-}
+const FEATURES: Array<[string, string]> = [
+  ["💎", "Durable nonce signing"],
+  ["🔒", "Confidential settlement"],
+  ["📡", "No RPC while offline"],
+  ["✨", "On-device AI"],
+]
 
 export default function HomePage() {
-  const [online, setOnline] = useState(true)
-  const [phase, setPhase] = useState<Phase>("idle")
-  const [text, setText] = useState("pay maria 50 usdc privately")
-  const [intent, setIntent] = useState<PaymentIntent | null>(null)
-  const [signedTxB58, setSignedTxB58] = useState<string | null>(null)
-  const [intentHash, setIntentHash] = useState<string | null>(null)
-  const [settlement, setSettlement] = useState<{ signature: string; sessionId: string } | null>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [logLines, setLogLines] = useState<string[]>([])
-  const logRef = useRef<HTMLDivElement | null>(null)
-
-  // --- Online/offline tracking -------------------------------------------
-  useEffect(() => {
-    const update = () => setOnline(typeof navigator !== "undefined" ? navigator.onLine : true)
-    update()
-    window.addEventListener("online", update)
-    window.addEventListener("offline", update)
-    return () => {
-      window.removeEventListener("online", update)
-      window.removeEventListener("offline", update)
-    }
-  }, [])
-
-  // --- Restore persisted state on mount ---------------------------------
-  useEffect(() => {
-    try {
-      const tx = localStorage.getItem("kumo:pending-tx")
-      const it = localStorage.getItem("kumo:pending-intent")
-      const ih = localStorage.getItem("kumo:pending-intent-hash")
-      if (tx && it) {
-        setSignedTxB58(tx)
-        setIntent(JSON.parse(it))
-        setIntentHash(ih)
-        setPhase("signed")
-        log("RECOVERED pending tx from local cache")
-      }
-    } catch {}
-  }, [])
-
-  function log(line: string) {
-    setLogLines((prev) => [...prev.slice(-30), `[${new Date().toLocaleTimeString()}] ${line}`])
-    queueMicrotask(() => {
-      logRef.current?.scrollTo({ top: 99999 })
-    })
-  }
-
-  // --- Demo nonce cache ---------------------------------------------------
-  // For the prototype we ship a faux nonce so /api/build-tx works without
-  // a real devnet round-trip. Replace with output of the online setup flow
-  // (see README → `Setup`).
-  const fauxNonce = useMemo(
-    () => ({
-      noncePubkey: "NoNcEAccnt1111111111111111111111111111111111",
-      nonce: "11111111111111111111111111111111",
-      authorityPubkey: "AutHor1tY1111111111111111111111111111111111",
-      refreshedAt: Date.now(),
-    }),
-    [],
-  )
-
-  // --- Actions -----------------------------------------------------------
-
-  async function onParse() {
-    setErrorMsg(null)
-    setPhase("parsing")
-    log("PARSE → POST /api/parse-intent (QVAC, localhost:11434)")
-    try {
-      const r = await fetch("/api/parse-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      })
-      const j = await r.json()
-      if (!j.ok) throw new Error(j.error)
-      setIntent(j.intent)
-      setPhase("parsed")
-      log(`OK → intent parsed: ${JSON.stringify(j.intent)}`)
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "parse failed")
-      setPhase("error")
-      log("ERR → " + (e instanceof Error ? e.message : "parse failed"))
-    }
-  }
-
-  async function onSign() {
-    if (!intent) return
-    setErrorMsg(null)
-    setPhase("signing")
-    log("SIGN → POST /api/build-tx (offline, durable nonce)")
-    try {
-      const recipientPubkey =
-        DEMO_RECIPIENT_MAP[intent.recipient.toLowerCase()] ?? intent.recipient
-      const r = await fetch("/api/build-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent, nonce: fauxNonce, recipientPubkey }),
-      })
-      const j = await r.json()
-      if (!j.ok) throw new Error(j.error)
-      setSignedTxB58(j.signed_tx_b58)
-      setIntentHash(j.intent_hash)
-      localStorage.setItem("kumo:pending-tx", j.signed_tx_b58)
-      localStorage.setItem("kumo:pending-intent", JSON.stringify(intent))
-      localStorage.setItem("kumo:pending-intent-hash", j.intent_hash)
-      setPhase("signed")
-      log(`OK → tx signed, hash=${j.intent_hash.slice(0, 16)}…`)
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "sign failed")
-      setPhase("error")
-      log("ERR → " + (e instanceof Error ? e.message : "sign failed"))
-    }
-  }
-
-  async function onBroadcast() {
-    if (!intent || !signedTxB58) return
-    setErrorMsg(null)
-    setPhase("broadcasting")
-    log("BROADCAST → POST /api/broadcast (MagicBlock PER)")
-    try {
-      const recipientPubkey =
-        DEMO_RECIPIENT_MAP[intent.recipient.toLowerCase()] ?? intent.recipient
-      const r = await fetch("/api/broadcast", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent, recipientPubkey, signed_tx_b58: signedTxB58 }),
-      })
-      const j = await r.json()
-      if (!j.ok) throw new Error(j.error)
-      setSettlement({ signature: j.signature, sessionId: j.magicblock_session_id })
-      setPhase("settled")
-      localStorage.removeItem("kumo:pending-tx")
-      localStorage.removeItem("kumo:pending-intent")
-      localStorage.removeItem("kumo:pending-intent-hash")
-      log(`OK → settled. sig=${j.signature.slice(0, 16)}…`)
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "broadcast failed")
-      setPhase("error")
-      log("ERR → " + (e instanceof Error ? e.message : "broadcast failed"))
-    }
-  }
-
-  function reset() {
-    setIntent(null)
-    setSignedTxB58(null)
-    setIntentHash(null)
-    setSettlement(null)
-    setErrorMsg(null)
-    setPhase("idle")
-    localStorage.removeItem("kumo:pending-tx")
-    localStorage.removeItem("kumo:pending-intent")
-    localStorage.removeItem("kumo:pending-intent-hash")
-  }
-
-  // --- Render ------------------------------------------------------------
-
   return (
-    <main className="crt min-h-screen px-6 md:px-14 py-10">
-      {/* HEADER */}
-      <header className="flex items-baseline justify-between gap-6 pb-6 rule mb-8">
-        <div>
-          <div className="text-[10px] tracking-[0.4em] text-ghost mb-1">// KUMO ↯ <span className="text-signal">雲</span> v0.1</div>
-          <h1 className="font-display text-3xl md:text-5xl leading-none">
-            offline.<span className="text-signal">confidential.</span>cross-chain.
-          </h1>
-        </div>
-        <NetworkBadge online={online} />
-      </header>
+    <div className="min-h-screen bg-cream has-topnav relative">
+      {/* Decorative background blobs + sprinkled clouds */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-12 -left-10 w-72 h-72 rounded-full bg-sky opacity-50 blur-3xl" />
+        <div className="absolute top-40 -right-20 w-96 h-96 rounded-full bg-lilac opacity-30 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 w-80 h-80 rounded-full bg-cyan opacity-30 blur-3xl" />
+        <CloudGlyph className="absolute top-32 left-[12%] opacity-50" size={48} />
+        <CloudGlyph className="absolute top-[58%] left-[7%] opacity-40" size={36} />
+        <CloudGlyph className="absolute top-24 right-[14%] opacity-50" size={56} />
+        <CloudGlyph className="absolute bottom-24 right-[20%] opacity-40" size={40} />
+        <Sparkle className="absolute top-44 left-[28%] animate-twinkle" size={20} color="#C7B5FF" />
+        <Sparkle className="absolute top-[55%] right-[28%] animate-twinkle [animation-delay:0.6s]" size={16} color="#7FE8FF" />
+        <Sparkle className="absolute bottom-32 left-[42%] animate-twinkle [animation-delay:1.2s]" size={14} color="#C7B5FF" />
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* LEFT: the action column */}
-        <section className="lg:col-span-7 space-y-8">
-          {/* INTENT INPUT */}
-          <Step n="01" label="Speak the intent" active={phase === "idle" || phase === "parsing"}>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="w-full bg-transparent border border-[#27241e] focus:border-signal outline-none p-4 font-mono text-lg resize-none"
-              placeholder="pay maria 50 usdc privately"
-              spellCheck={false}
-            />
-            <div className="flex items-center gap-3 mt-3 text-xs text-ghost">
-              <span className="badge">qvac · llama-3.2-1b</span>
-              <span className="badge">on-device</span>
-              <span className="badge">↯ no egress</span>
+      <main className="relative max-w-[1180px] mx-auto px-8 pt-16 pb-24">
+        {/* Hero */}
+        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-16 items-center min-h-[calc(100vh-180px)]">
+          {/* Left: copy */}
+          <div>
+            <div className="mb-8">
+              <Image
+                src="/logo-sec-01.png"
+                alt="KumoPay"
+                width={300}
+                height={72}
+                style={{ height: 72, width: "auto" }}
+                priority
+              />
             </div>
-            <button
-              onClick={onParse}
-              disabled={phase === "parsing" || !text.trim()}
-              className="mt-6 group inline-flex items-center gap-3 border border-paper px-6 py-3 hover:bg-signal hover:border-signal hover:text-ink transition-colors disabled:opacity-30"
-            >
-              <span className="font-display tracking-widest">{phase === "parsing" ? "PARSING…" : "PARSE INTENT"}</span>
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </button>
-          </Step>
 
-          {/* PARSED INTENT */}
-          {intent && (
-            <Step n="02" label="Sign offline" active={phase === "parsed" || phase === "signing"}>
-              <pre className="bg-[#0d0e0f] border border-[#27241e] p-4 text-sm text-paper overflow-x-auto">
-{JSON.stringify(intent, null, 2)}
-              </pre>
-              <div className="flex flex-wrap items-center gap-3 mt-3 text-xs">
-                <span className="badge">durable nonce</span>
-                <span className="badge">no rpc call</span>
-                {intent.private && <span className="badge text-signal border-signal">PRIVATE</span>}
-              </div>
-              <button
-                onClick={onSign}
-                disabled={phase === "signing" || !!signedTxB58}
-                className="mt-6 inline-flex items-center gap-3 border border-paper px-6 py-3 hover:bg-signal hover:border-signal hover:text-ink transition-colors disabled:opacity-30"
-              >
-                <span className="font-display tracking-widest">
-                  {phase === "signing" ? "SIGNING…" : signedTxB58 ? "SIGNED ✓" : "SIGN OFFLINE"}
-                </span>
-              </button>
-            </Step>
-          )}
+            <h1 className="font-display font-black text-navy text-[64px] leading-[1.02] tracking-[-0.02em] mb-6">
+              Pay when the<br />signal disappears.
+            </h1>
 
-          {/* PENDING / BROADCAST */}
-          {signedTxB58 && (
-            <Step n="03" label="Broadcast on reconnect" active={phase === "signed" || phase === "broadcasting" || phase === "settled"}>
-              <div className="space-y-2 text-sm text-ghost">
-                <div className="flex items-center gap-2">
-                  <span className="text-paper">tx hash</span>
-                  <code className="text-signal break-all">{intentHash?.slice(0, 32)}…</code>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-paper">tx bytes</span>
-                  <code className="break-all">{signedTxB58.slice(0, 48)}…</code>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-paper">status</span>
-                  {phase === "settled" ? (
-                    <span className="text-signal">SETTLED via MagicBlock PER</span>
-                  ) : online ? (
-                    <span className="animate-pulse-soft">READY — awaiting your tap to broadcast</span>
-                  ) : (
-                    <span className="text-signal">QUEUED — waiting for reconnect</span>
-                  )}
-                </div>
-              </div>
+            <div className="inline-flex items-center gap-2 bg-white softshadow-sm rounded-full px-3 py-1.5 text-[12px] font-bold text-navy mb-7">
+              <span className="w-2 h-2 rounded-full bg-cyan" />
+              Built for Solana Mobile · Saga Seed Vault
+            </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={onBroadcast}
-                  disabled={!online || phase === "broadcasting" || phase === "settled"}
-                  className="inline-flex items-center gap-3 border border-signal text-signal px-6 py-3 hover:bg-signal hover:text-ink transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-signal"
-                >
-                  <span className="font-display tracking-widest">
-                    {phase === "broadcasting"
-                      ? "BROADCASTING…"
-                      : phase === "settled"
-                      ? "SETTLED ✓"
-                      : "BROADCAST"}
-                  </span>
-                </button>
-                {phase === "settled" && (
-                  <button onClick={reset} className="px-6 py-3 text-ghost hover:text-paper transition-colors">
-                    new payment ↻
-                  </button>
-                )}
-              </div>
-
-              {settlement && (
-                <div className="mt-6 border-l-2 border-signal pl-4 text-sm">
-                  <div><span className="text-ghost">signature:</span> <code>{settlement.signature}</code></div>
-                  <div><span className="text-ghost">session:</span> <code>{settlement.sessionId}</code></div>
-                  <div className="text-ghost mt-2">
-                    public chain shows: nonceAdvance + 1-lamport placeholder. amount &amp; recipient sealed inside MagicBlock&apos;s PER (Intel TDX).
-                  </div>
-                </div>
-              )}
-            </Step>
-          )}
-
-          {/* CROSS-CHAIN */}
-          <Step n="—" label="Fund from Base (LI.FI)" active={false}>
-            <p className="text-ghost text-sm leading-relaxed max-w-prose">
-              No Solana balance? Bridge USDC from Base. Settlement takes 60s–4min via Mayan/CCTP — the demo shows
-              the route &amp; receipt; final landing happens off-camera.
+            <p className="text-navy/70 text-[18px] leading-[1.6] max-w-[520px] mb-9">
+              Kumo is your offline-first companion for confidential USDC payments on Solana.
+              Sign while you&apos;re in the air, on the subway, or off-grid — Kumo waits with you,
+              then delivers the moment you reconnect.
             </p>
-            <button
-              disabled
-              className="mt-4 inline-flex items-center gap-3 border border-[#27241e] text-ghost px-6 py-3 cursor-not-allowed"
-            >
-              <span className="font-display tracking-widest">FUND FROM BASE</span>
-              <span className="text-[10px] uppercase tracking-widest">stub</span>
-            </button>
-          </Step>
-        </section>
 
-        {/* RIGHT: the diagnostic column */}
-        <aside className="lg:col-span-5 space-y-6">
-          <div className="border border-[#27241e] p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] tracking-[0.3em] text-ghost">// FLIGHT LOG</span>
-              <span className={`text-[10px] tracking-[0.3em] ${online ? "text-paper" : "text-signal animate-pulse-soft"}`}>
-                {online ? "↑ ONLINE" : "↓ OFFLINE"}
-              </span>
+            <div className="flex flex-wrap gap-3 mb-10">
+              <Link
+                href="/app"
+                className="pressable inline-flex items-center gap-2 bg-cyan text-navy font-display font-extrabold text-[15px] px-7 py-4 rounded-full softshadow"
+              >
+                <PlayGlyph /> Try the demo
+              </Link>
+              <a
+                href="#how"
+                className="pressable inline-flex items-center gap-2 bg-white text-navy font-display font-extrabold text-[15px] px-7 py-4 rounded-full"
+                style={{ boxShadow: "inset 0 0 0 1.5px #0B1020" }}
+              >
+                <DownloadGlyph /> Learn more
+              </a>
             </div>
-            <div ref={logRef} className="h-72 overflow-y-auto text-[12px] leading-relaxed font-mono text-ghost space-y-1">
-              {logLines.length === 0 && <div className="opacity-50">no events yet · type an intent &amp; press parse</div>}
-              {logLines.map((l, i) => (
-                <div key={i} className="whitespace-pre-wrap">{l}</div>
+
+            <div className="flex flex-wrap gap-2">
+              {FEATURES.map(([e, t]) => (
+                <span
+                  key={t}
+                  className="inline-flex items-center gap-2 bg-sky/60 text-navy font-bold text-[12px] px-3 py-1.5 rounded-full"
+                >
+                  <span>{e}</span>
+                  {t}
+                </span>
               ))}
             </div>
           </div>
 
-          <div className="border border-[#27241e] p-5 text-[12px] leading-relaxed">
-            <div className="text-[10px] tracking-[0.3em] text-ghost mb-3">// PRIMITIVES</div>
-            <ul className="space-y-2">
-              <li><span className="text-signal">QVAC</span> · on-device intent parser, OpenAI-compatible HTTP @ <code>localhost:11434</code></li>
-              <li><span className="text-signal">DURABLE NONCE</span> · sign while offline, broadcast on reconnect</li>
-              <li><span className="text-signal">MAGICBLOCK PER</span> · TEE-backed confidential settlement (Intel TDX)</li>
-              <li><span className="text-signal">LI.FI</span> · cross-chain inbound (Base → Solana via Mayan/CCTP)</li>
-              <li><span className="text-signal">ANCHOR</span> · intent commitment + post-settlement receipt</li>
-            </ul>
-          </div>
+          {/* Right: mascot card */}
+          <div className="relative">
+            <div
+              className="relative card softshadow rounded-[36px] p-10 overflow-hidden"
+              style={{ minHeight: 480 }}
+            >
+              <div
+                className="absolute inset-x-0 top-0 h-32 bg-sky/40"
+                style={{ borderRadius: "36px 36px 60% 60% / 36px 36px 100% 100%" }}
+              />
+              <CloudGlyph className="absolute top-6 left-8 opacity-70" size={28} />
+              <CloudGlyph className="absolute top-12 right-10 opacity-60" size={22} />
 
-          {errorMsg && (
-            <div className="border border-signal text-signal p-4 text-sm">
-              <div className="text-[10px] tracking-[0.3em] mb-2">// ERROR</div>
-              {errorMsg}
+              <div className="relative flex flex-col items-center pt-6">
+                <div className="animate-breathe">
+                  <Image
+                    src="/kumo-mascot.png"
+                    alt="Kumo mascot"
+                    width={260}
+                    height={260}
+                    style={{ width: 260, height: "auto" }}
+                    priority
+                  />
+                </div>
+                <div className="mt-6 text-center">
+                  <div className="font-display font-black text-navy text-[40px] tracking-[-0.02em] leading-none">
+                    Kumo
+                  </div>
+                  <div className="text-navy/60 text-[14px] mt-2 font-semibold">
+                    your offline payment companion
+                  </div>
+                </div>
+                <div className="mt-7 grid grid-cols-3 gap-3 w-full">
+                  <StatTile k="USDC" v="$24M+" s="settled offline" />
+                  <StatTile k="Avg" v="0.4s" s="sign latency" />
+                  <StatTile k="Privacy" v="100%" s="amount sealed" />
+                </div>
+              </div>
             </div>
-          )}
-        </aside>
-      </div>
 
-      <footer className="mt-16 pt-6 rule flex items-center justify-between text-[11px] text-ghost">
-        <span>↯ devnet · 72-hour build · Dev3Pack 2026 + Solana Frontier sidetracks</span>
-        <span className="animate-blink">█</span>
-      </footer>
-    </main>
-  )
-}
+            <div
+              className="absolute -left-6 top-12 bg-white card px-4 py-3 rounded-2xl text-[13px] font-bold text-navy"
+              style={{ boxShadow: "0 10px 30px rgba(11,16,32,0.10)" }}
+            >
+              <span className="text-cyan mr-2">●</span>What payment, friend?
+            </div>
+            <div
+              className="absolute -right-4 bottom-16 bg-white card px-4 py-3 rounded-2xl text-[13px] font-bold text-navy"
+              style={{ boxShadow: "0 10px 30px rgba(11,16,32,0.10)" }}
+            >
+              <span className="mr-2">✈️</span>Resting until you reconnect…
+            </div>
+          </div>
+        </div>
 
-// --- helpers --------------------------------------------------------------
+        {/* How it works */}
+        <section className="mt-32" id="how">
+          <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-navy/50 mb-3">How it works</div>
+          <h2 className="font-display font-black text-navy text-[40px] leading-tight tracking-[-0.02em] mb-12 max-w-[640px]">
+            Five gentle steps. Even when the world goes dark.
+          </h2>
+          <div className="grid md:grid-cols-5 gap-4">
+            {HOW_STEPS.map(([n, t, d]) => (
+              <div key={n} className="card p-5 rounded-2xl">
+                <div className="font-display font-extrabold text-cyan text-[12px] tracking-[0.18em]">{n}</div>
+                <div className="font-display font-extrabold text-navy text-[18px] mt-2">{t}</div>
+                <div className="text-navy/60 text-[13px] mt-2 leading-snug">{d}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-function Step(props: { n: string; label: string; active: boolean; children: React.ReactNode }) {
-  return (
-    <div className={`border-l-2 pl-6 transition-colors ${props.active ? "border-signal" : "border-[#27241e]"}`}>
-      <div className="flex items-baseline gap-3 mb-3">
-        <span className="font-display text-2xl text-ghost">{props.n}</span>
-        <span className="text-[10px] tracking-[0.4em] text-ghost uppercase">{props.label}</span>
-      </div>
-      {props.children}
+        {/* CTA strip pointing to flow */}
+        <section className="mt-24" id="flow-cta">
+          <div className="card rounded-[28px] p-10 lg:p-12 flex flex-col lg:flex-row items-center gap-10 overflow-hidden relative">
+            <div aria-hidden className="absolute -top-12 -right-10 w-72 h-72 rounded-full bg-cyan/40 blur-3xl" />
+            <div className="relative shrink-0">
+              <KumoMascot size={140} expression="curious" />
+            </div>
+            <div className="relative flex-1">
+              <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-navy/50 mb-2">Live walkthrough</div>
+              <h3 className="font-display font-black text-navy text-[28px] leading-tight tracking-[-0.02em] mb-2">
+                Take Kumo for a walk through the offline flow.
+              </h3>
+              <p className="text-navy/70 max-w-[520px]">
+                Step through five connected screens — wallet connect, intent, Face ID, queued, and settled — wired to the real
+                devnet APIs.
+              </p>
+            </div>
+            <Link
+              href="/flow"
+              className="pressable inline-flex items-center gap-2 bg-navy text-cloud font-display font-extrabold text-[15px] px-7 py-4 rounded-full softshadow shrink-0"
+            >
+              Open the flow →
+            </Link>
+          </div>
+        </section>
+
+        <footer className="mt-24 flex items-center justify-between text-navy/50 text-[12px] font-semibold">
+          <div className="flex items-center gap-2">
+            <KumoMark size={20} /> kumopay.app · Built for Solana Mobile
+          </div>
+          <div>© 2026 Kumo Labs</div>
+        </footer>
+      </main>
     </div>
   )
 }
 
-function NetworkBadge({ online }: { online: boolean }) {
+function StatTile({ k, v, s }: { k: string; v: string; s: string }) {
   return (
-    <div className={`flex items-center gap-3 border px-3 py-2 ${online ? "border-paper" : "border-signal text-signal"}`}>
-      <span className={`block w-2 h-2 rounded-full ${online ? "bg-paper" : "bg-signal animate-pulse-soft"}`} />
-      <span className="text-[11px] tracking-[0.3em] uppercase">
-        {online ? "online" : "offline / airplane mode"}
-      </span>
+    <div className="bg-cream rounded-2xl p-3 text-center">
+      <div className="text-[10px] font-bold tracking-[0.16em] uppercase text-navy/50">{k}</div>
+      <div className="font-display font-black text-navy text-[20px] leading-tight mt-1">{v}</div>
+      <div className="text-[11px] text-navy/60 mt-0.5">{s}</div>
     </div>
+  )
+}
+
+function CloudGlyph({ className = "", size = 40 }: { className?: string; size?: number }) {
+  return (
+    <svg className={className} width={size} height={size * 0.7} viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M10 30 c0 -10 9 -16 18 -14 c2 -8 13 -10 18 -3 c8 -1 12 7 8 12 c5 3 2 11 -3 11 l-36 0 c-7 0 -8 -3 -5 -6 z"
+        fill="#fff"
+        stroke="#0B1020"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        opacity="0.95"
+      />
+    </svg>
+  )
+}
+
+function Sparkle({
+  className = "",
+  size = 20,
+  color = "#C7B5FF",
+}: {
+  className?: string
+  size?: number
+  color?: string
+}) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="-10 -10 20 20">
+      <path d="M0 -7 L2 -2 L7 0 L2 2 L0 7 L-2 2 L-7 0 L-2 -2 Z" fill={color} />
+    </svg>
+  )
+}
+
+function PlayGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <path d="M3 2 L11 7 L3 12 Z" fill="#0B1020" />
+    </svg>
+  )
+}
+
+function DownloadGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#0B1020" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 1 V9 M3 6 L7 10 L11 6 M2 12 H12" />
+    </svg>
   )
 }
