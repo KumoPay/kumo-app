@@ -27,3 +27,6 @@ skills-lock.json
 # Local/generated demo artifacts
 apps/desktop/tsconfig.tsbuildinfo
 demo-keypair.json
+
+# Design source exports
+Brand-kit /
