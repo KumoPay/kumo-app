@@ -25,8 +25,8 @@ type Phase = "idle" | "parsing" | "parsed" | "signing" | "signed" | "broadcastin
 const DEMO_RECIPIENT_MAP: Record<string, string> = {
   // Resolves friendly names → Solana pubkey. In production this is encrypted
   // contact storage. For the demo we ship two devnet pubkeys.
-  maria: "Marian1y6E1t4fzAU9w1pHUv4PbRctSkzQK9wyfVGJoP",
-  javier: "Javb98z7oN2YtLuufvmksUqK7XK9CdNWnehkFaR2cR9",
+  maria: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
+  javier: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
 }
 
 export default function HomePage() {
