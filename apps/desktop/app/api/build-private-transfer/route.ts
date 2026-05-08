@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    console.log("[build-private-transfer] req:", {
+      from: userPubkey,
+      to: recipientPubkey,
+      amount_usdc: intent.amount_usdc,
+      private: intent.private,
+    })
     const built = await privateTransfer({
       fromPubkey: userPubkey,
       toPubkey: recipientPubkey,
@@ -54,6 +60,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "build failed"
+    console.error("[build-private-transfer] FAILED:", msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 502 })
   }
 }

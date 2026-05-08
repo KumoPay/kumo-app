@@ -62,6 +62,15 @@ const ApiErrorSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
+    issues: z
+      .array(
+        z.object({
+          code: z.string(),
+          message: z.string(),
+          path: z.array(z.union([z.string(), z.number()])).optional(),
+        }),
+      )
+      .optional(),
   }),
 })
 
@@ -74,10 +83,15 @@ async function unwrap<T>(
   const parsed = schema.safeParse(json)
   if (parsed.success) return parsed.data
   const err = ApiErrorSchema.safeParse(json)
+  if (err.success) {
+    const { code, message, issues } = err.data.error
+    const detail = issues?.length
+      ? " · " + issues.map((i) => `${(i.path ?? []).join(".")}: ${i.message}`).join("; ")
+      : ""
+    throw new Error(`${label} failed (${code}): ${message}${detail}`)
+  }
   throw new Error(
-    err.success
-      ? `${label} failed (${err.data.error.code}): ${err.data.error.message}`
-      : `${label} returned unexpected payload (HTTP ${res.status}): ${JSON.stringify(json).slice(0, 200)}`,
+    `${label} returned unexpected payload (HTTP ${res.status}): ${JSON.stringify(json).slice(0, 200)}`,
   )
 }
 
@@ -116,10 +130,16 @@ export async function privateTransfer(opts: {
   memo?: string
   legacy?: boolean
 }): Promise<BuiltTransaction> {
-  const amount = BigInt(Math.round(opts.amountUsdc * 1_000_000)).toString()
+  // API wants a number, not a string. USDC has 6 decimals — even Number.MAX_SAFE_INTEGER
+  // covers ~9 trillion USDC, so plain number is safe here.
+  const amount = Math.round(opts.amountUsdc * 1_000_000)
   const fromBalance = opts.fromBalance ?? "base"
   const toBalance = opts.toBalance ?? "base"
 
+  // Init flags: keep queue + ATA init (small instructions) but let the vault
+  // default to false. Setting initVaultIfMissing=true blows past Solana's 1232
+  // byte tx limit. If the vault genuinely isn't initialized, we'll see that as
+  // a separate runtime error and add a deposit step instead.
   const body: Record<string, unknown> = {
     from: opts.fromPubkey,
     to: opts.toPubkey,
@@ -131,16 +151,36 @@ export async function privateTransfer(opts: {
     cluster: CLUSTER,
     initIfMissing: true,
     initAtasIfMissing: true,
-    initVaultIfMissing: true,
   }
   if (opts.memo) body.memo = opts.memo
   if (opts.legacy) body.legacy = true
 
   const needsAuth = fromBalance === "ephemeral" || toBalance === "ephemeral"
-  const res = await fetch(`${MPP_BASE}/spl/transfer`, {
-    method: "POST",
-    headers: authHeaders(needsAuth),
-    body: JSON.stringify(body),
-  })
-  return unwrap(res, BuildTxSchema, "transfer")
+  // Single retry on transient network failures. MagicBlock's beta endpoint
+  // occasionally drops a request — a quick retry usually clears it.
+  let lastErr: unknown = null
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(`${MPP_BASE}/spl/transfer`, {
+        method: "POST",
+        headers: authHeaders(needsAuth),
+        body: JSON.stringify(body),
+      })
+      return await unwrap(res, BuildTxSchema, "transfer")
+    } catch (e) {
+      lastErr = e
+      // Only retry on bare "fetch failed" / network errors. Don't retry
+      // 4xx/5xx with a parsed body — those are deterministic.
+      const msg = e instanceof Error ? e.message : String(e)
+      const networkLike = /fetch failed|network|timeout|ECONN|ENOTFOUND/i.test(msg)
+      if (!networkLike || attempt === 2) break
+    }
+  }
+  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr)
+  if (/fetch failed|ECONN|ENOTFOUND/i.test(msg)) {
+    throw new Error(
+      `Couldn't reach MagicBlock (${MPP_BASE}). Their beta endpoint may be having a hiccup — wait a moment and retry. Underlying: ${msg}`,
+    )
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(msg)
 }

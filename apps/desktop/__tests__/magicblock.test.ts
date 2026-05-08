@@ -49,7 +49,7 @@ describe("MagicBlock private payments", () => {
     expect(init.method).toBe("POST")
 
     const body = JSON.parse(init.body)
-    expect(body.amount).toBe("50000000")
+    expect(body.amount).toBe(50000000)
     expect(body.visibility).toBe("private")
     expect(body.fromBalance).toBe("base")
     expect(body.toBalance).toBe("base")
