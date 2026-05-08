@@ -16,3 +16,14 @@ test-ledger
 .anchor
 .cache
 coverage
+
+# Internal docs — mirrored in the private skills repo, not tracked here.
+docs/*.md
+.agents/
+DOCUMENTATION.md
+SKILL.md
+skills-lock.json
+
+# Local/generated demo artifacts
+apps/desktop/tsconfig.tsbuildinfo
+demo-keypair.json
