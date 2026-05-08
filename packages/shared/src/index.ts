@@ -5,7 +5,7 @@ import { z } from "zod"
 // Kept tiny on purpose: any extra field would just give the LLM more rope.
 
 export const PaymentIntentSchema = z.object({
-  recipient: z.string().min(1).max(64), // either a base58 pubkey OR a label like "maria" we resolve from a local contact map
+  recipient: z.string().min(1).max(64), // either a base58 pubkey OR a label like "alice" we resolve from a local contact map
   amount_usdc: z.number().positive().max(1_000_000),
   private: z.boolean(),
   memo: z.string().max(120).optional(),
@@ -52,20 +52,27 @@ Rules:
 - "private", "privately", "confidential", "off the record" => private: true
 - Default private to false if not stated.
 - recipient is the name/label as said. Do not invent pubkeys. Do not add prefixes.
+- If the user says "<name> sol" or "<name> dot sol" they mean a Solana Name Service domain — output it as "<name>.sol" with a dot.
 - amount_usdc is a number in USDC. Strip currency symbols, words like "dollars", "USDC".
 - memo only if the user explicitly attaches one ("for rent", "note: thanks").
 - NEVER output prose. NEVER wrap in markdown. NEVER add fields not in the schema.
 
 Examples:
 
-User: pay maria 50 usdc privately
-JSON: {"recipient":"maria","amount_usdc":50,"private":true}
+User: pay alice 50 usdc privately
+JSON: {"recipient":"alice","amount_usdc":50,"private":true}
 
-User: send 12.5 to javier for groceries
-JSON: {"recipient":"javier","amount_usdc":12.5,"private":false,"memo":"groceries"}
+User: send 12.5 to bob for groceries
+JSON: {"recipient":"bob","amount_usdc":12.5,"private":false,"memo":"groceries"}
 
 User: confidential 100 usdc to wallet 9wR... for rent april
 JSON: {"recipient":"9wR...","amount_usdc":100,"private":true,"memo":"rent april"}
+
+User: pay carol sol 5 usdc privately
+JSON: {"recipient":"carol.sol","amount_usdc":5,"private":true}
+
+User: send 2 usdc to bob.sol
+JSON: {"recipient":"bob.sol","amount_usdc":2,"private":false}
 `
 
 // --- helpers --------------------------------------------------------------

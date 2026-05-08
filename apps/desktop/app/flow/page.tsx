@@ -16,8 +16,9 @@ const FLOW_SCREENS: Array<{ id: ScreenId; step: string; label: string }> = [
 ]
 
 const DEMO_RECIPIENT_MAP: Record<string, string> = {
-  maria: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
-  javier: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
+  alice: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
+  bob: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
+  carol: "9dVFGHp5AEkan51Q6PVDxRn4tQByrwUdwkmtwkUsCi43",
 }
 
 type Settlement = { signature: string; sessionId: string }
@@ -518,7 +519,7 @@ function ScreenConnect({ onNext }: ScreenProps) {
 }
 
 function ScreenIntent({ airplane, setAirplane, busy, onParse }: ScreenProps) {
-  const [text, setText] = useState("pay maria 50 usdc privately")
+  const [text, setText] = useState("pay alice 1 usdc privately")
   return (
     <>
       <PhoneStatusBar airplane={airplane} />
@@ -558,7 +559,7 @@ function ScreenIntent({ airplane, setAirplane, busy, onParse }: ScreenProps) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
-          placeholder="pay maria 50 usdc privately"
+          placeholder="pay alice 1 usdc privately"
           style={{
             width: "100%",
             marginTop: 8,

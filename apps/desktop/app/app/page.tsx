@@ -9,6 +9,14 @@ import bs58 from "bs58"
 import { KumoMascot } from "@/components/kumo-mascot"
 import type { PaymentIntent } from "@kumo/shared"
 import { MobileFlow } from "./MobileFlow"
+import {
+  allContacts,
+  displayName,
+  loadContacts,
+  resolveRecipient,
+  saveContact,
+  type ContactMap,
+} from "@/lib/contacts"
 
 type ScreenId = "connect" | "intent" | "sign" | "queued" | "settled"
 
@@ -20,16 +28,13 @@ const FLOW_SCREENS: Array<{ id: ScreenId; step: string; label: string }> = [
   { id: "settled", step: "05", label: "Delivered" },
 ]
 
-const DEMO_RECIPIENT_MAP: Record<string, string> = {
-  maria: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
-  javier: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
-}
+// Recipient resolution is centralized in lib/contacts.ts (async because of SNS).
 
 type Settlement = { signature: string; sessionId: string }
 
 export default function RealAppPage() {
   const { connection } = useConnection()
-  const { publicKey, connected, signMessage, signTransaction, wallet } = useWallet()
+  const { publicKey, connected, signMessage, signTransaction, wallet, disconnect } = useWallet()
 
   const [idx, setIdx] = useState(0)
   const [airplane, setAirplane] = useState(false)
@@ -39,7 +44,27 @@ export default function RealAppPage() {
   const [settlement, setSettlement] = useState<Settlement | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [text, setText] = useState("pay maria 50 usdc privately")
+  const [text, setText] = useState("pay alice 1 usdc privately")
+  const [contacts, setContacts] = useState<ContactMap>({})
+  const [lastRecipient, setLastRecipient] = useState<{ name: string; pubkey: string; via: string } | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Track when we're past hydration. Until then we treat the wallet as
+  // disconnected so the SSR snapshot and the first client render agree.
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Load saved contacts from localStorage on mount (and when settlement saves a new one)
+  useEffect(() => {
+    setContacts(allContacts())
+  }, [settlement])
+
+  // Wallet values are unstable across SSR/CSR (autoConnect kicks in fast on the client).
+  // Use null/false during the first render to match the server, then swap in real values.
+  const safeWallet = mounted ? wallet : null
+  const safePubkey = mounted ? publicKey : null
+  const safeConnected = mounted && connected
 
   useEffect(() => {
     if (connected && idx === 0) setIdx(1)
@@ -49,6 +74,21 @@ export default function RealAppPage() {
     if (FLOW_SCREENS[idx].id === "queued") setAirplane(true)
     if (FLOW_SCREENS[idx].id === "settled") setAirplane(false)
   }, [idx])
+
+  // Fresh entry to /app: reset flow state (wallet connection persists via autoConnect).
+  // Runs once per mount of this client component. If you stay connected we'll auto-advance
+  // to step 1 via the effect above.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setIntent(null)
+    setIntentHash(null)
+    setOfflineSig(null)
+    setSettlement(null)
+    setErrorMsg(null)
+    setAirplane(false)
+    setText("pay alice 1 usdc privately")
+    setIdx(0)
+  }, [])
 
   const screen = FLOW_SCREENS[idx]
 
@@ -109,10 +149,15 @@ export default function RealAppPage() {
     }
     setErrorMsg(null)
     setBusy(true)
+    const resolved = await resolveRecipient(intent.recipient, connection)
+    if (!resolved.ok) {
+      setErrorMsg(resolved.reason)
+      setBusy(false)
+      return
+    }
+    const recipientPubkey = resolved.pubkey
+    setLastRecipient({ name: intent.recipient, pubkey: recipientPubkey, via: resolved.via })
     try {
-      const recipientPubkey =
-        DEMO_RECIPIENT_MAP[intent.recipient.toLowerCase()] ?? intent.recipient
-
       const r = await fetch("/api/build-private-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -164,14 +209,37 @@ export default function RealAppPage() {
     setIdx(connected ? 1 : 0)
   }
 
-  const props = {
+  async function switchWallet() {
+    setIntent(null)
+    setIntentHash(null)
+    setOfflineSig(null)
+    setSettlement(null)
+    setErrorMsg(null)
+    setAirplane(false)
+    setIdx(0)
+    try {
+      await disconnect()
+    } catch {
+      /* swallow — user-cancellable, not an error worth surfacing */
+    }
+  }
+
+  function onSaveContact(name: string, pubkey: string) {
+    saveContact(name, pubkey)
+    setContacts(allContacts())
+    setLastRecipient(null)
+  }
+
+  const props: ScreenProps = {
     airplane, setAirplane,
     intent, intentHash, offlineSig, settlement,
     busy, errorMsg,
-    walletLabel: wallet?.adapter.name ?? "wallet",
-    walletPubkey: publicKey?.toBase58() ?? null,
-    connected,
+    walletLabel: safeWallet?.adapter.name ?? "wallet",
+    walletPubkey: safePubkey?.toBase58() ?? null,
+    connected: safeConnected,
     text, setText,
+    contacts, lastRecipient,
+    onSaveContact,
     onParse: callParse, onSignOffline: callSignOffline, onBroadcast: callBroadcast, onReset: reset,
   }
 
@@ -198,15 +266,19 @@ export default function RealAppPage() {
         settlement={settlement}
         busy={busy}
         errorMsg={errorMsg}
-        walletLabel={wallet?.adapter.name ?? "wallet"}
-        walletPubkey={publicKey?.toBase58() ?? null}
-        connected={connected}
+        walletLabel={safeWallet?.adapter.name ?? "wallet"}
+        walletPubkey={safePubkey?.toBase58() ?? null}
+        connected={safeConnected}
         text={text}
         setText={setText}
+        contacts={contacts}
+        lastRecipient={lastRecipient}
+        onSaveContact={onSaveContact}
         onParse={callParse}
         onSignOffline={callSignOffline}
         onBroadcast={callBroadcast}
         onReset={reset}
+        onSwitchWallet={switchWallet}
       />
 
       {/* DESKTOP — wizard layout (≥ lg) */}
@@ -228,14 +300,14 @@ export default function RealAppPage() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <NetworkPill airplane={airplane} setAirplane={setAirplane} />
-            {connected && publicKey ? (
+            {safeConnected && safePubkey ? (
               <div className="card rounded-full px-4 py-2 softshadow-sm flex items-center gap-3">
                 <span className="w-2 h-2 rounded-full bg-cyan" />
                 <span className="font-display font-extrabold text-navy text-[12px]">
-                  {wallet?.adapter.name}
+                  {safeWallet?.adapter.name}
                 </span>
                 <span className="font-mono text-[11px] text-navy/60">
-                  {publicKey.toBase58().slice(0, 5)}…{publicKey.toBase58().slice(-4)}
+                  {safePubkey.toBase58().slice(0, 5)}…{safePubkey.toBase58().slice(-4)}
                 </span>
               </div>
             ) : (
@@ -244,14 +316,19 @@ export default function RealAppPage() {
           </div>
         </div>
 
-        {/* Step chips */}
+        {/* Step chips — clicking back to "Connect" disconnects + resets */}
         <Stepper
           idx={idx}
           screens={FLOW_SCREENS}
           onSelect={(i) => {
-            if (i === 0 || connected) setIdx(i)
+            if (i === 0) {
+              if (safeConnected) switchWallet()
+              else setIdx(0)
+            } else if (safeConnected) {
+              setIdx(i)
+            }
           }}
-          connected={connected}
+          connected={safeConnected}
         />
 
         {/* Main card + side notes */}
@@ -361,6 +438,9 @@ type ScreenProps = {
   connected: boolean
   text: string
   setText: (t: string) => void
+  contacts: ContactMap
+  lastRecipient: { name: string; pubkey: string; via: string } | null
+  onSaveContact: (name: string, pubkey: string) => void
   onParse: (text: string) => void
   onSignOffline: () => void
   onBroadcast: () => void
@@ -399,7 +479,8 @@ function ScreenConnect({ connected }: ScreenProps) {
   )
 }
 
-function ScreenIntent({ airplane, busy, walletLabel, walletPubkey, text, setText, onParse }: ScreenProps) {
+function ScreenIntent({ airplane, busy, walletLabel, walletPubkey, text, setText, contacts, onParse }: ScreenProps) {
+  const contactNames = Object.keys(contacts)
   return (
     <div className="grid md:grid-cols-[auto_1fr] gap-10">
       <div className="shrink-0 mx-auto md:mx-0">
@@ -425,13 +506,35 @@ function ScreenIntent({ airplane, busy, walletLabel, walletPubkey, text, setText
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
-          placeholder="pay maria 50 usdc privately"
+          placeholder="pay alice 1 usdc privately, or bob.sol, or paste a pubkey"
           className="w-full mt-5 p-5 rounded-2xl bg-white border-[1.5px] border-transparent outline-none resize-none text-[16px] text-navy softshadow-sm focus:border-cyan transition"
         />
+
+        {contactNames.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[10px] font-bold tracking-[0.18em] uppercase text-navy/50 mb-1.5">Your contacts</div>
+            <div className="flex flex-wrap gap-2">
+              {contactNames.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setText(`pay ${name} 1 usdc privately`)}
+                  className="pressable inline-flex items-center gap-2 bg-white text-navy font-bold text-[12px] px-3 py-1.5 rounded-full"
+                  style={{ boxShadow: "inset 0 0 0 1px #B7F1FF" }}
+                  title={contacts[name]}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan" />
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2 mt-3">
           <Chip>🤖 qvac on-device</Chip>
           <Chip>🔒 no leaks</Chip>
+          <Chip lilac>🌐 .sol resolution</Chip>
           {airplane && <Chip lilac>✈ airplane mode</Chip>}
         </div>
 
@@ -523,9 +626,10 @@ function ScreenQueued({ intent, intentHash, offlineSig, busy, onBroadcast }: Scr
   )
 }
 
-function ScreenSettled({ intent, settlement, onReset }: ScreenProps) {
+function ScreenSettled({ intent, settlement, lastRecipient, onSaveContact, onReset }: ScreenProps) {
   const sig = settlement?.signature
   const sigShort = sig ? `${sig.slice(0, 10)}…${sig.slice(-8)}` : "—"
+  const showSavePrompt = lastRecipient?.via === "raw" || lastRecipient?.via === "sns"
   return (
     <div className="grid md:grid-cols-[auto_1fr] gap-10 items-start">
       <div className="shrink-0 mx-auto md:mx-0">
@@ -561,12 +665,68 @@ function ScreenSettled({ intent, settlement, onReset }: ScreenProps) {
           </div>
         )}
 
+        {showSavePrompt && lastRecipient && (
+          <SaveContactPrompt
+            defaultName={lastRecipient.via === "sns" ? lastRecipient.name.replace(/\.sol$/i, "") : ""}
+            pubkey={lastRecipient.pubkey}
+            onSave={(name) => onSaveContact(name, lastRecipient.pubkey)}
+          />
+        )}
+
         <div className="mt-8 flex flex-wrap gap-3">
           <BigCTA primary onClick={onReset}>Send another payment 💖</BigCTA>
           <Link href="/" className="pressable inline-flex items-center gap-2 bg-white text-navy font-display font-extrabold text-[15px] px-7 py-3 rounded-full" style={{ boxShadow: "inset 0 0 0 1.5px #0B1020" }}>
             Done
           </Link>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function SaveContactPrompt({
+  defaultName,
+  pubkey,
+  onSave,
+}: {
+  defaultName: string
+  pubkey: string
+  onSave: (name: string) => void
+}) {
+  const [name, setName] = useState(defaultName)
+  const [saved, setSaved] = useState(false)
+  if (saved) {
+    return (
+      <div className="mt-5 p-3 rounded-2xl bg-cyan/30 text-[13px] font-bold text-navy">
+        ✨ Saved as &ldquo;{name}&rdquo; — next time, just type the name.
+      </div>
+    )
+  }
+  return (
+    <div className="mt-5 p-4 rounded-2xl bg-white border border-sky/60 max-w-[520px]">
+      <div className="text-[10px] font-bold tracking-[0.18em] uppercase text-navy/50">Save this recipient?</div>
+      <div className="font-mono text-[11px] text-navy/65 mt-1 break-all">{pubkey}</div>
+      <div className="flex flex-wrap gap-2 mt-3">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="contact name"
+          className="flex-1 min-w-[160px] px-4 py-2 rounded-full bg-cream border-[1.5px] border-transparent outline-none text-[13px] font-bold text-navy focus:border-cyan transition"
+        />
+        <button
+          onClick={() => {
+            const trimmed = name.trim()
+            if (!trimmed) return
+            onSave(trimmed)
+            setSaved(true)
+          }}
+          disabled={!name.trim()}
+          className="pressable px-5 py-2 rounded-full bg-cyan text-navy font-display font-extrabold text-[13px] disabled:opacity-50"
+          style={{ boxShadow: "0 4px 12px rgba(127,232,255,0.4)" }}
+        >
+          Save contact
+        </button>
       </div>
     </div>
   )

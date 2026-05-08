@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import { WalletModalButton } from "@solana/wallet-adapter-react-ui"
 import { KumoMascot, KumoMark } from "@/components/kumo-mascot"
@@ -25,10 +25,14 @@ export type SharedProps = {
   connected: boolean
   text: string
   setText: (t: string) => void
+  contacts: Record<string, string>
+  lastRecipient: { name: string; pubkey: string; via: string } | null
+  onSaveContact: (name: string, pubkey: string) => void
   onParse: (text: string) => void
   onSignOffline: () => void
   onBroadcast: () => void
   onReset: () => void
+  onSwitchWallet: () => void
 }
 
 const SCREENS: ScreenId[] = ["connect", "intent", "sign", "queued", "settled"]
@@ -115,16 +119,24 @@ export function MobileFlow(p: SharedProps) {
         </button>
       </div>
 
-      {/* Progress dots */}
+      {/* Progress dots — clicking "Connect" disconnects + resets */}
       <div className="relative px-5 mt-2 flex items-center justify-between gap-2">
         {SCREENS.map((id, i) => {
           const active = i === p.idx
           const done = i < p.idx
           const reachable = i === 0 || p.connected
+          const onClick = () => {
+            if (i === 0) {
+              if (p.connected) p.onSwitchWallet()
+              else p.setIdx(0)
+            } else if (reachable) {
+              p.setIdx(i)
+            }
+          }
           return (
             <button
               key={id}
-              onClick={() => reachable && p.setIdx(i)}
+              onClick={onClick}
               disabled={!reachable}
               className={[
                 "flex-1 h-1.5 rounded-full transition",
@@ -191,7 +203,8 @@ function MConnect() {
   )
 }
 
-function MIntent({ airplane, walletLabel, walletPubkey, text, setText }: SharedProps) {
+function MIntent({ airplane, walletLabel, walletPubkey, text, setText, contacts }: SharedProps) {
+  const contactNames = Object.keys(contacts)
   return (
     <div>
       <div className="flex items-end gap-3 mb-4">
@@ -213,13 +226,34 @@ function MIntent({ airplane, walletLabel, walletPubkey, text, setText }: SharedP
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder="pay maria 50 usdc privately"
+        placeholder="pay alice 1 usdc privately, or bob.sol"
         className="w-full mt-2 p-4 rounded-2xl bg-white border-[1.5px] border-transparent outline-none resize-none text-[16px] text-navy softshadow-sm focus:border-cyan transition"
       />
+
+      {contactNames.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[9px] font-bold tracking-[0.16em] uppercase text-navy/50 mb-1.5">Contacts</div>
+          <div className="flex flex-wrap gap-1.5">
+            {contactNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setText(`pay ${name} 1 usdc privately`)}
+                className="pressable inline-flex items-center gap-1.5 bg-white text-navy font-bold text-[11px] px-2.5 py-1 rounded-full"
+                style={{ boxShadow: "inset 0 0 0 1px #B7F1FF" }}
+              >
+                <span className="w-1 h-1 rounded-full bg-cyan" />
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5 mt-3">
         <Chip>🤖 qvac on-device</Chip>
         <Chip>🔒 no leaks</Chip>
+        <Chip lilac>🌐 .sol</Chip>
         {airplane && <Chip lilac>✈ airplane mode</Chip>}
       </div>
     </div>
@@ -295,8 +329,9 @@ function MQueued({ intent, intentHash, offlineSig }: SharedProps) {
   )
 }
 
-function MSettled({ intent, settlement }: SharedProps) {
+function MSettled({ intent, settlement, lastRecipient, onSaveContact }: SharedProps) {
   const sig = settlement?.signature
+  const showSavePrompt = lastRecipient?.via === "raw" || lastRecipient?.via === "sns"
   return (
     <div>
       <div className="flex justify-center mt-1">
@@ -328,6 +363,61 @@ function MSettled({ intent, settlement }: SharedProps) {
             </a>
           )}
         </div>
+
+        {showSavePrompt && lastRecipient && (
+          <MSaveContactPrompt
+            defaultName={lastRecipient.via === "sns" ? lastRecipient.name.replace(/\.sol$/i, "") : ""}
+            pubkey={lastRecipient.pubkey}
+            onSave={(name) => onSaveContact(name, lastRecipient.pubkey)}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MSaveContactPrompt({
+  defaultName,
+  pubkey,
+  onSave,
+}: {
+  defaultName: string
+  pubkey: string
+  onSave: (name: string) => void
+}) {
+  const [name, setName] = useState(defaultName)
+  const [saved, setSaved] = useState(false)
+  if (saved) {
+    return (
+      <div className="mt-4 p-3 rounded-xl bg-cyan/30 text-[12px] font-bold text-navy text-center">
+        ✨ Saved as &ldquo;{name}&rdquo;
+      </div>
+    )
+  }
+  return (
+    <div className="mt-4 p-3 rounded-xl bg-white border border-sky/60">
+      <div className="text-[10px] font-bold tracking-[0.18em] uppercase text-navy/50">Save recipient?</div>
+      <div className="font-mono text-[10px] text-navy/65 mt-0.5 break-all">{pubkey.slice(0, 24)}…</div>
+      <div className="flex gap-2 mt-2">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="name"
+          className="flex-1 min-w-0 px-3 py-1.5 rounded-full bg-cream border-[1.5px] border-transparent outline-none text-[12px] font-bold text-navy focus:border-cyan transition"
+        />
+        <button
+          onClick={() => {
+            const t = name.trim()
+            if (!t) return
+            onSave(t)
+            setSaved(true)
+          }}
+          disabled={!name.trim()}
+          className="pressable px-3 py-1.5 rounded-full bg-cyan text-navy font-display font-extrabold text-[12px] disabled:opacity-50"
+        >
+          Save
+        </button>
       </div>
     </div>
   )
