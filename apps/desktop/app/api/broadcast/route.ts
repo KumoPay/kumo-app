@@ -1,15 +1,24 @@
 // apps/desktop/app/api/broadcast/route.ts
 //
-// Called when the device reconnects. Sends the pre-signed offline
-// tx through MagicBlock PER for confidential settlement.
+// Called when the device reconnects. Asks MagicBlock to build a private
+// SPL transfer (unsigned), signs it with the demo wallet, and submits.
+// Returns the resulting Solana signature for the receipt.
 
 import { NextRequest, NextResponse } from "next/server"
+import {
+  Connection,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js"
 import { PaymentIntentSchema } from "@kumo/shared"
 import { privateTransfer } from "@/lib/magicblock-pmts"
 import { loadDemoWallet } from "@/lib/wallet"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+const SOLANA_RPC =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -25,7 +34,6 @@ export async function POST(req: NextRequest) {
   const intent = intentParse.data
 
   const recipientPubkey: string | undefined = body.recipientPubkey
-  const signedTxB58: string | undefined = body.signed_tx_b58
   if (!recipientPubkey) {
     return NextResponse.json(
       { ok: false, error: "Missing recipientPubkey" },
@@ -35,16 +43,33 @@ export async function POST(req: NextRequest) {
 
   try {
     const payer = loadDemoWallet()
-    const result = await privateTransfer({
+
+    const built = await privateTransfer({
       fromPubkey: payer.publicKey.toBase58(),
       toPubkey: recipientPubkey,
       amountUsdc: intent.amount_usdc,
-      serializedTxB64: signedTxB58, // attach pre-signed tx for receipt
+      memo: intent.memo,
     })
+
+    const txBytes = Buffer.from(built.transactionBase64, "base64")
+    const conn = new Connection(SOLANA_RPC, "confirmed")
+
+    let signature: string
+    if (built.version === "v0") {
+      const vtx = VersionedTransaction.deserialize(txBytes)
+      vtx.sign([payer])
+      signature = await conn.sendRawTransaction(vtx.serialize())
+    } else {
+      const tx = Transaction.from(txBytes)
+      tx.partialSign(payer)
+      signature = await conn.sendRawTransaction(tx.serialize())
+    }
+
     return NextResponse.json({
       ok: true,
-      signature: result.signature,
-      magicblock_session_id: result.sessionId,
+      signature,
+      magicblock_session_id: built.validator ?? "no-validator",
+      send_to: built.sendTo,
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Broadcast failed"
