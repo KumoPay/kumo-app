@@ -12,8 +12,12 @@
     "anchor:test": "cd programs/intent-receipt && anchor test --skip-deploy"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "prettier": "^3.3.3"
+    "bs58": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "prettier": "^3.3.3",
+    "tsx": "^4.21.0",
+    "tweetnacl": "^1.0.3",
+    "typescript": "^5.5.4"
   },
   "packageManager": "pnpm@9.15.9",
   "engines": {
