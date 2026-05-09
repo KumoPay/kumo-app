@@ -9,6 +9,13 @@ import { Connection, Transaction, VersionedTransaction } from "@solana/web3.js"
 import type { PaymentIntent } from "@kumo/shared"
 
 import { AppOpenSplash } from "./AppOpenSplash"
+import {
+  readStoredCluster,
+  writeStoredCluster,
+  type SolanaClusterId,
+} from "./cluster-preference"
+import { MobileTabBar, type MobileTabId } from "./MobileTabBar"
+import { WalletNetworkMenu } from "./WalletNetworkMenu"
 import { BackButton } from "./screens/atoms"
 import { Home } from "./screens/Home"
 import { Contacts } from "./screens/Contacts"
@@ -37,11 +44,6 @@ import {
   writeAliasOnboardingComplete,
   writeStoredWallet,
 } from "./wallet-storage"
-import {
-  readStoredCluster,
-  writeStoredCluster,
-  type SolanaClusterId,
-} from "./cluster-preference"
 
 const MAGICBLOCK_TEE_RPC =
   process.env.NEXT_PUBLIC_MAGICBLOCK_TEE_RPC ?? "https://devnet-tee.magicblock.app"
@@ -75,23 +77,7 @@ const slideVariants = {
 const SWIPE_BACK_THRESHOLD = 80
 const SWIPE_VELOCITY_THRESHOLD = 400
 
-function walletBrandSrc(brand: string): string {
-  switch (brand) {
-    case "phantom":
-      return "/wallet-phantom.png"
-    case "solflare":
-      return "/wallet-solflare.png"
-    case "backpack":
-      return "/wallet-backpack.png"
-    case "glow":
-      return "/wallet-glow.png"
-    default:
-      return "/wallet-phantom.png"
-  }
-}
-
 function adapterNameForBrand(brand: string): string {
-  // Adapter `wallet.adapter.name` matches these strings.
   switch (brand) {
     case "phantom": return "Phantom"
     case "solflare": return "Solflare"
@@ -119,12 +105,10 @@ export function MobileShell() {
   const [stack, setStack] = useState<ScreenId[]>(["connect"])
   const [direction, setDirection] = useState<1 | -1>(1)
   const [airplane, setAirplane] = useState(false)
-  const [solanaCluster, setSolanaClusterState] =
-    useState<SolanaClusterId>(readStoredCluster)
   const [wallet, setWallet] = useState<WalletInfo | null>(null)
   const [showAppSplash, setShowAppSplash] = useState(false)
+  const [solanaCluster, setSolanaClusterState] = useState<SolanaClusterId>("devnet")
 
-  // Payment flow state
   const [intentText, setIntentText] = useState("pay alice 1 usdc privately")
   const [parsedIntent, setParsedIntent] = useState<PaymentIntent | null>(null)
   const [intentHash, setIntentHash] = useState<string | null>(null)
@@ -133,7 +117,6 @@ export function MobileShell() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Real wallet adapter
   const { connection } = useConnection()
   const adapter = useWallet()
   const {
@@ -148,8 +131,15 @@ export function MobileShell() {
     wallets,
   } = adapter
 
-  // Restore previous session (alias + brand). Real connection is established
-  // separately via wallet-adapter `autoConnect`.
+  useEffect(() => {
+    setSolanaClusterState(readStoredCluster())
+  }, [])
+
+  const setSolanaCluster = useCallback((id: SolanaClusterId) => {
+    writeStoredCluster(id)
+    setSolanaClusterState(id)
+  }, [])
+
   useEffect(() => {
     const w = readStoredWallet()
     if (w) {
@@ -164,7 +154,6 @@ export function MobileShell() {
     setBootstrapped(true)
   }, [])
 
-  // Sync wallet info to whatever wallet-adapter currently reports.
   useEffect(() => {
     if (!connected || !publicKey || !activeWallet) return
     const adapterName = activeWallet.adapter.name
@@ -216,18 +205,12 @@ export function MobileShell() {
 
   const goToNewPayment = useCallback(() => {
     setDirection(1)
-    setIntentText("")
+    setStack(["home", "intent"])
     setParsedIntent(null)
     setIntentHash(null)
     setOfflineSig(null)
     setSettlement(null)
     setError(null)
-    setStack(["home", "intent"])
-  }, [])
-
-  const setSolanaCluster = useCallback((id: SolanaClusterId) => {
-    setSolanaClusterState(id)
-    writeStoredCluster(id)
   }, [])
 
   const completeAliasOnboarding = useCallback((localHandle: string) => {
@@ -259,14 +242,11 @@ export function MobileShell() {
             `${adapterName} isn't installed. Install it from the store and try again.`,
           )
         }
-        // wallet-adapter wants the WalletName branded type — cast through unknown.
         select(found.adapter.name as unknown as Parameters<typeof select>[0])
-        // Wait one tick for the selected wallet to propagate.
         await new Promise((r) => setTimeout(r, 30))
         await connect()
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        // User cancelled the wallet popup — don't surface as error.
         if (!/user rejected|reject|user cancelled/i.test(msg)) {
           setError(msg)
         }
@@ -411,12 +391,12 @@ export function MobileShell() {
       goToNewPayment,
       airplane,
       setAirplane,
-      solanaCluster,
-      setSolanaCluster,
       wallet,
       beginWalletConnect,
       disconnectWallet,
       completeAliasOnboarding,
+      solanaCluster,
+      setSolanaCluster,
       intentText,
       setIntentText,
       parsedIntent,
@@ -435,12 +415,12 @@ export function MobileShell() {
       resetHome,
       goToNewPayment,
       airplane,
-      solanaCluster,
-      setSolanaCluster,
       wallet,
       beginWalletConnect,
       disconnectWallet,
       completeAliasOnboarding,
+      solanaCluster,
+      setSolanaCluster,
       intentText,
       parsedIntent,
       intentHash,
@@ -458,7 +438,6 @@ export function MobileShell() {
     setShowAppSplash(false)
   }, [])
 
-  // After successful real connect, advance from /connect → /alias or /home.
   useEffect(() => {
     if (!connected || !publicKey || !wallet) return
     if (stack[stack.length - 1] !== "connect") return
@@ -484,11 +463,53 @@ export function MobileShell() {
   const inPayFlow = PAY_FLOW.includes(current)
   const payIdx = PAY_FLOW.indexOf(current)
   const isHomeDashboard = current === "home" && !canGoBack
+  const showSettingsHeader = wallet && current === "settings" && canGoBack
+  const showHomeBrandHeader =
+    wallet &&
+    ((current === "home" && !canGoBack) ||
+      (stack.length === 2 &&
+        stack[0] === "home" &&
+        ["contacts", "history", "receive"].includes(current)))
+  const useBrandedPayHeader = wallet && (current === "sign" || current === "queued")
   const isAliasOnboarding = current === "alias"
   const isOnConnect = current === "connect"
   const isMinimalBackdrop = isOnConnect || isAliasOnboarding
   const showHeaderActions =
     wallet !== null && !isOnConnect && !isAliasOnboarding && !isHomeDashboard
+
+  const showMainTabBar = Boolean(
+    wallet && !isOnConnect && !isAliasOnboarding && !inPayFlow,
+  )
+
+  const activeTab: MobileTabId = useMemo(() => {
+    if (current === "contacts") return "contactos"
+    if (current === "settings") return "ajustes"
+    if (current === "history") return "historial"
+    if (PAY_FLOW.includes(current)) return "inicio"
+    return "inicio"
+  }, [current])
+
+  const onTabInicio = useCallback(() => {
+    resetHome()
+  }, [resetHome])
+
+  const onTabHistorial = useCallback(() => {
+    if (current === "history") return
+    setDirection(1)
+    setStack(["home", "history"])
+  }, [current])
+
+  const onTabContactos = useCallback(() => {
+    if (current === "contacts") return
+    setDirection(1)
+    setStack(["home", "contacts"])
+  }, [current])
+
+  const onTabAjustes = useCallback(() => {
+    if (current === "settings") return
+    setDirection(1)
+    setStack(["home", "settings"])
+  }, [current])
 
   if (!bootstrapped) {
     return (
@@ -500,9 +521,14 @@ export function MobileShell() {
     )
   }
 
+  const shellTintBg =
+    current === "home" ||
+    (showMainTabBar &&
+      ["home", "history", "receive", "contacts", "settings"].includes(current))
+
   return (
     <div
-      className={["relative flex flex-col", current === "home" ? "bg-[#f9fafb]" : ""].join(" ")}
+      className={["relative flex flex-col", shellTintBg ? "bg-[#f9fafb]" : ""].join(" ")}
       style={{ height: "100dvh", overflow: "hidden" }}
     >
       <div
@@ -518,94 +544,189 @@ export function MobileShell() {
       </div>
 
       <header className="relative z-20 flex flex-shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-3">
-        {isHomeDashboard ? (
-          <>
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Image
-                src="/state-00.png"
-                alt=""
-                width={34}
-                height={34}
-                className="size-[34px] shrink-0 object-contain"
-                priority
-              />
-              <span className="font-display text-[15px] font-extrabold tracking-[0.04em] text-navy">KUMO</span>
+        {showSettingsHeader ? (
+          <div className="relative flex min-h-9 w-full min-w-0 items-center justify-center">
+            <div className="absolute left-0 top-1/2 z-10 -translate-y-1/2">
+              <BackButton onClick={back} />
             </div>
-            <button
-              type="button"
-              onClick={() => push("settings")}
-              aria-label="Wallet & settings"
-              className="pressable inline-flex max-w-[200px] shrink-0 items-center gap-2 rounded-full border border-black/[0.05] bg-[#f6f7f9] px-[11px] py-2 shadow-[0_1px_2px_rgba(11,16,32,0.06)] outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#7c5cff]"
-            >
+            <div className="flex items-center justify-center gap-0.5">
               <Image
-                src={walletBrandSrc(wallet?.brand ?? "phantom")}
+                src="/favicon-32.png"
                 alt=""
-                width={44}
-                height={44}
-                className="size-[22px] shrink-0 rounded-full object-cover ring-[2px] ring-white"
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
                 priority
               />
-              <span className="truncate text-[13px] font-semibold capitalize tracking-tight text-[#141b2f]">
-                {wallet?.label ?? ""}
-              </span>
-              <span className="size-2 shrink-0 rounded-full bg-[#22c58a]" aria-hidden />
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="flex min-w-0 items-center gap-2">
+              <Image
+                src="/logo-primary-02.png"
+                alt="KUMO"
+                width={480}
+                height={120}
+                className="h-[28px] w-auto max-w-[min(156px,48vw)] shrink-0 object-contain object-center"
+                priority
+              />
+            </div>
+          </div>
+        ) : showHomeBrandHeader && wallet ? (
+          <div className="flex w-full min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-0.5">
+              <Image
+                src="/favicon-32.png"
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
+                priority
+              />
+              <Image
+                src="/logo-primary-02.png"
+                alt="KUMO"
+                width={480}
+                height={120}
+                className="h-[28px] w-auto max-w-[min(156px,48vw)] shrink-0 object-contain object-left"
+                priority
+              />
+            </div>
+            <WalletNetworkMenu
+              wallet={wallet}
+              cluster={solanaCluster}
+              onClusterChange={setSolanaCluster}
+            />
+          </div>
+        ) : current === "settled" && wallet ? (
+          <div className="flex w-full min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-0.5">
+              <Image
+                src="/favicon-32.png"
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
+                priority
+              />
+              <Image
+                src="/logo-primary-02.png"
+                alt="KUMO"
+                width={480}
+                height={120}
+                className="h-[28px] w-auto max-w-[min(156px,48vw)] shrink-0 object-contain object-left"
+                priority
+              />
+            </div>
+            <WalletNetworkMenu
+              wallet={wallet}
+              cluster={solanaCluster}
+              onClusterChange={setSolanaCluster}
+            />
+          </div>
+        ) : useBrandedPayHeader && wallet ? (
+          <div className="flex w-full min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-0.5">
+              <Image
+                src="/favicon-32.png"
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
+                priority
+              />
+              <Image
+                src="/logo-primary-02.png"
+                alt="KUMO"
+                width={480}
+                height={120}
+                className="h-[28px] w-auto max-w-[min(156px,48vw)] shrink-0 object-contain object-left"
+                priority
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <WalletNetworkMenu
+                wallet={wallet}
+                cluster={solanaCluster}
+                onClusterChange={setSolanaCluster}
+              />
+              <button
+                type="button"
+                onClick={() => setAirplane(!airplane)}
+                aria-pressed={airplane}
+                aria-label={airplane ? "Turn off airplane mode" : "Turn on airplane mode"}
+                className={[
+                  "pressable inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                  airplane
+                    ? "bg-[#C7B5FF] text-[#0B1020]"
+                    : "bg-white text-[#0B1020]",
+                ].join(" ")}
+                style={{
+                  boxShadow: "0 1px 2px rgba(11,16,32,0.06)",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        ) : showHeaderActions && wallet ? (
+          <div className="flex w-full min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {canGoBack ? <BackButton onClick={back} /> : null}
               <span
                 className={[
-                  "font-display font-extrabold tracking-[-0.02em] text-navy",
+                  "min-w-0 truncate font-display font-extrabold tracking-[-0.02em] text-navy",
                   isOnConnect ? "text-[15px]" : "text-[18px]",
                 ].join(" ")}
               >
                 {isOnConnect ? "KUMO" : "Kumo"}
               </span>
             </div>
-            {showHeaderActions ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setAirplane(!airplane)}
-                  className="pressable inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display font-extrabold text-[11px]"
-                  style={{
-                    background: airplane ? "#C7B5FF" : "#B7F1FF",
-                    color: "#0B1020",
-                  }}
-                >
-                  {airplane ? "✈ Airplane" : `● ${wallet?.label ?? ""}`}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => push("settings")}
-                  aria-label="Settings"
-                  className="pressable inline-flex h-8 w-8 items-center justify-center rounded-full bg-white"
-                  style={{
-                    boxShadow: "0 1px 2px rgba(11,16,32,0.06)",
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="3" stroke="#0B1020" strokeWidth="2" />
-                    <path
-                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-                      stroke="#0B1020"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ) : null}
-          </>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <WalletNetworkMenu
+                wallet={wallet}
+                cluster={solanaCluster}
+                onClusterChange={setSolanaCluster}
+              />
+              <button
+                type="button"
+                onClick={() => setAirplane(!airplane)}
+                aria-pressed={airplane}
+                aria-label={airplane ? "Turn off airplane mode" : "Turn on airplane mode"}
+                className={[
+                  "pressable inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                  airplane
+                    ? "bg-[#C7B5FF] text-[#0B1020]"
+                    : "bg-white text-[#0B1020]",
+                ].join(" ")}
+                style={{
+                  boxShadow: "0 1px 2px rgba(11,16,32,0.06)",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-w-0 items-center gap-2">
+            {canGoBack ? <BackButton onClick={back} /> : null}
+            <span
+              className={[
+                "font-display font-extrabold tracking-[-0.02em] text-navy",
+                isOnConnect ? "text-[15px]" : "text-[18px]",
+              ].join(" ")}
+            >
+              {isOnConnect ? "KUMO" : "Kumo"}
+            </span>
+          </div>
         )}
       </header>
 
-      {/* Progress dots — only in pay sub-flow */}
-      {inPayFlow && (
-        <div className="relative z-20 flex-shrink-0 px-5 mt-1 flex items-center gap-1.5">
+      {(current === "intent" ||
+        current === "sign" ||
+        current === "queued" ||
+        current === "settled") && (
+        <div className="relative z-20 mt-1 flex flex-shrink-0 items-center gap-1.5 px-5">
           {PAY_FLOW.map((id, i) => {
             const active = i === payIdx
             const done = i < payIdx
@@ -613,8 +734,13 @@ export function MobileShell() {
               <span
                 key={id}
                 className={[
-                  "flex-1 h-1.5 rounded-full transition-colors duration-300",
-                  active ? "bg-navy" : done ? "bg-cyan" : "bg-sky/50",
+                  "flex-1 rounded-full transition-colors duration-300",
+                  "h-1.5",
+                  active
+                    ? "bg-[#a78bfa]"
+                    : done
+                      ? "bg-[#7dd3fc]"
+                      : "bg-[#e2e8f0]",
                 ].join(" ")}
                 aria-label={id}
               />
@@ -629,7 +755,6 @@ export function MobileShell() {
         </div>
       )}
 
-      {/* Scrollable body with stack-style transitions */}
       <main
         className="relative flex-1 min-h-0 overflow-hidden"
         style={{ touchAction: "pan-y" }}
@@ -654,8 +779,9 @@ export function MobileShell() {
             dragElastic={{ left: 0, right: 0.45 }}
             onDragEnd={handleDragEnd}
             className={[
-              "absolute inset-0 overflow-y-auto px-5 pb-6 pt-3",
-              current === "home" ? "bg-[#f9fafb]" : "",
+              "absolute inset-0 overflow-y-auto px-5 pt-3",
+              current === "queued" || current === "settled" ? "pb-4" : "pb-6",
+              shellTintBg ? "bg-[#f9fafb]" : "",
             ].join(" ")}
             style={{ WebkitOverflowScrolling: "touch" }}
           >
@@ -664,12 +790,14 @@ export function MobileShell() {
         </AnimatePresence>
       </main>
 
-      {/* Sticky bottom CTA — only when the screen provides one */}
       {slots.cta ? (
         <footer
-          className="relative z-20 flex-shrink-0 px-5 pb-5 pt-3"
+          className={[
+            "relative z-20 flex-shrink-0 px-5",
+            current === "queued" || current === "settled" ? "pb-3 pt-2" : "pb-5 pt-3",
+          ].join(" ")}
           style={
-            current === "home"
+            shellTintBg
               ? {
                   background: "#f9fafb",
                   borderTop: "1px solid #eef0f3",
@@ -684,6 +812,15 @@ export function MobileShell() {
         >
           {slots.cta}
         </footer>
+      ) : null}
+      {showMainTabBar ? (
+        <MobileTabBar
+          activeTab={activeTab}
+          onInicio={onTabInicio}
+          onHistorial={onTabHistorial}
+          onContactos={onTabContactos}
+          onAjustes={onTabAjustes}
+        />
       ) : null}
       {showAppSplash ? <AppOpenSplash onDismiss={dismissAppSplash} /> : null}
     </div>
