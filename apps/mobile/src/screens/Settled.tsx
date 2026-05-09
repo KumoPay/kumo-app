@@ -47,8 +47,8 @@ export const Settled: ScreenRenderer = (ctx) => {
     ),
     cta: (
       <View style={{ gap: 8 }}>
-        <PrimaryCTA onPress={ctx.resetHome}>Send another payment 💖</PrimaryCTA>
-        <SecondaryCTA onPress={ctx.resetHome}>Done</SecondaryCTA>
+        <PrimaryCTA onPress={ctx.goToNewPayment}>Make another payment</PrimaryCTA>
+        <SecondaryCTA onPress={ctx.resetHome}>Go home</SecondaryCTA>
       </View>
     ),
   }

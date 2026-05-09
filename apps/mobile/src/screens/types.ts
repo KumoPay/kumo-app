@@ -37,6 +37,8 @@ export type NavCtx = {
   push: (id: ScreenId) => void
   back: () => void
   resetHome: () => void
+  /** Jump to a new payment intent (home → intent); use tiles or in-app CTAs, not the tab bar. */
+  goToNewPayment: () => void
   airplane: boolean
   setAirplane: (v: boolean) => void
   /** Default privacy mode for parsed intents (Public SPL vs MagicBlock private). */

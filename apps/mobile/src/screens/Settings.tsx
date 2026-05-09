@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native"
+import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native"
 import { Eyebrow, SecondaryCTA } from "./atoms"
+import { ASSETS } from "./assets"
 import { K, SHADOW } from "./theme"
 import {
   LOCAL_AI,
@@ -80,8 +81,13 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
 
   return (
     <View>
-      <Text style={styles.h1}>Settings</Text>
-      <Text style={styles.sub}>Wallet, network, and demo controls.</Text>
+      <View style={styles.titleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.h1}>Settings</Text>
+          <Text style={styles.sub}>Privacy, wallet, and on-device data.</Text>
+        </View>
+        <Image source={ASSETS.state07} style={styles.titleMascot} resizeMode="contain" />
+      </View>
 
       <View style={{ marginTop: 18 }}>
         <Eyebrow>Network</Eyebrow>
@@ -243,8 +249,10 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
 }
 
 const styles = StyleSheet.create({
-  h1: { fontSize: 24, fontWeight: "900", letterSpacing: -0.5, color: K.navy },
-  sub: { marginTop: 4, fontSize: 13, color: K.navy55 },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  titleMascot: { width: 96, height: 96, marginTop: -6 },
+  h1: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5, color: K.navy },
+  sub: { marginTop: 6, fontSize: 14, color: K.navy55, fontWeight: "500" },
   card: {
     marginTop: 8,
     backgroundColor: K.white,

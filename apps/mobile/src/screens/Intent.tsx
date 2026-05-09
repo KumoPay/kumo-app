@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   StyleSheet,
   Switch,
@@ -17,7 +16,6 @@ import {
 } from "expo-audio"
 import { Chip, Eyebrow, PrimaryCTA } from "./atoms"
 import { K, SHADOW } from "./theme"
-import { ASSETS } from "./assets"
 import {
   isWhisperDownloaded,
   isWhisperEnabled,
@@ -26,7 +24,6 @@ import {
 import type { NavCtx, ScreenRenderer } from "./types"
 
 export const Intent: ScreenRenderer = (ctx) => ({
-  eyebrow: "02 — intent",
   body: <IntentBody ctx={ctx} />,
   cta: (
     <PrimaryCTA
@@ -34,7 +31,7 @@ export const Intent: ScreenRenderer = (ctx) => ({
       disabled={!ctx.intentText.trim()}
       onPress={() => void ctx.parseIntent()}
     >
-      {ctx.busy ? "Parsing…" : "Parse intent →"}
+      {ctx.busy ? "Parsing…" : "Create intent"}
     </PrimaryCTA>
   ),
 })
@@ -93,12 +90,8 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
 
   return (
     <View>
-      <View style={styles.bubbleRow}>
-        <Image source={ASSETS.state00} style={styles.miniMascot} resizeMode="contain" />
-        <View style={[styles.bubble, SHADOW.pill]}>
-          <Text style={styles.bubbleText}>What payment, friend?</Text>
-        </View>
-      </View>
+      <Text style={styles.title}>New payment</Text>
+      <Text style={styles.titleSub}>Describe the payment in plain language.</Text>
 
       {ctx.wallet && (
         <View style={styles.walletPill}>
@@ -108,6 +101,8 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
           </Text>
         </View>
       )}
+
+      <View style={{ marginTop: 14 }} />
 
       <View style={styles.privacyRow}>
         <View style={{ flex: 1 }}>
@@ -177,16 +172,18 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
 }
 
 const styles = StyleSheet.create({
-  bubbleRow: { flexDirection: "row", alignItems: "flex-end", gap: 12, marginBottom: 16 },
-  miniMascot: { width: 72, height: 72 },
-  bubble: {
-    backgroundColor: K.white,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginBottom: 4,
+  title: {
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    color: "#0f172a",
   },
-  bubbleText: { color: K.navy, fontWeight: "700", fontSize: 13 },
+  titleSub: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
   walletPill: {
     flexDirection: "row",
     alignItems: "center",

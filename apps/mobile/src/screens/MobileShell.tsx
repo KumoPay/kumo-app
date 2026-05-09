@@ -18,7 +18,7 @@ import type { PaymentIntent } from "@kumo/shared"
 
 import { K, SHADOW } from "./theme"
 import { BackButton } from "./atoms"
-import { ASSETS } from "./assets"
+import { ASSETS, walletLogoFor as walletLogoForBrand } from "./assets"
 import { Connect } from "./Connect"
 import { ChooseAlias } from "./ChooseAlias"
 import { Home } from "./Home"
@@ -33,6 +33,7 @@ import { Settings } from "./Settings"
 import { EnableLocalAI } from "./EnableLocalAI"
 import { EnableWhisper } from "./EnableWhisper"
 import { AppOpenSplash } from "./AppOpenSplash"
+import { MobileTabBar, type MobileTabId } from "./MobileTabBar"
 import {
   PAY_FLOW,
   type NavCtx,
@@ -163,6 +164,16 @@ export function MobileShell() {
   const resetHome = useCallback(() => {
     setDirection(-1)
     setStack(["home"])
+    setParsedIntent(null)
+    setIntentHash(null)
+    setOfflineSig(null)
+    setSettlement(null)
+    setError(null)
+  }, [])
+
+  const goToNewPayment = useCallback(() => {
+    setDirection(1)
+    setStack(["home", "intent"])
     setParsedIntent(null)
     setIntentHash(null)
     setOfflineSig(null)
@@ -384,14 +395,14 @@ export function MobileShell() {
 
   const ctx: NavCtx = useMemo(
     () => ({
-      push, back, resetHome, airplane, setAirplane,
+      push, back, resetHome, goToNewPayment, airplane, setAirplane,
       privacyDefault, setPrivacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, setIntentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
     }),
     [
-      push, back, resetHome, airplane, privacyDefault,
+      push, back, resetHome, goToNewPayment, airplane, privacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
@@ -404,7 +415,38 @@ export function MobileShell() {
   const payIdx = PAY_FLOW.indexOf(current)
   const isHomeDashboard = current === "home" && !canGoBack
   const isAliasOnboarding = current === "alias"
+  const isOnboardingFlow =
+    isAliasOnboarding ||
+    current === "enableLocalAI" ||
+    current === "enableWhisper"
   const isOnConnect = current === "connect"
+
+  const showMainTabBar =
+    Boolean(wallet) && !isOnConnect && !isOnboardingFlow && !inPayFlow
+
+  const activeTab: MobileTabId = (() => {
+    if (current === "contacts") return "contactos"
+    if (current === "settings") return "ajustes"
+    if (current === "history") return "historial"
+    return "inicio"
+  })()
+
+  const onTabInicio = useCallback(() => resetHome(), [resetHome])
+  const onTabHistorial = useCallback(() => {
+    if (current === "history") return
+    setDirection(1)
+    setStack(["home", "history"])
+  }, [current])
+  const onTabContactos = useCallback(() => {
+    if (current === "contacts") return
+    setDirection(1)
+    setStack(["home", "contacts"])
+  }, [current])
+  const onTabAjustes = useCallback(() => {
+    if (current === "settings") return
+    setDirection(1)
+    setStack(["home", "settings"])
+  }, [current])
 
   if (!bootstrapped) {
     return <SafeAreaView style={[styles.safe, { backgroundColor: "#ede9fe" }]} />
@@ -415,17 +457,21 @@ export function MobileShell() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        {isHomeDashboard ? (
+        {wallet && (isHomeDashboard || (current === "history" || current === "contacts" || current === "receive" || current === "settled")) ? (
           <>
             <View style={styles.headerLeft}>
-              <Image source={ASSETS.state00} style={styles.headerMascot} resizeMode="contain" />
-              <Text style={styles.brandSm}>KUMO</Text>
+              <Image source={ASSETS.favicon32} style={styles.headerFavicon} resizeMode="cover" />
+              <Image source={ASSETS.logoPrimary02} style={styles.headerLogo} resizeMode="contain" />
             </View>
             <Pressable
               onPress={() => push("settings")}
               style={({ pressed }) => [styles.walletPill, SHADOW.pill, pressed && { opacity: 0.85 }]}
             >
-              <Image source={ASSETS.state00} style={styles.walletPillAvatar} resizeMode="contain" />
+              <Image
+                source={walletLogoForBrand(wallet.brand)}
+                style={styles.walletPillAvatar}
+                resizeMode="cover"
+              />
               <Text style={styles.walletPillText} numberOfLines={1}>
                 {wallet?.label || ""}
               </Text>
@@ -440,25 +486,19 @@ export function MobileShell() {
                 {isOnConnect ? "KUMO" : "Kumo"}
               </Text>
             </View>
-            {wallet && !isOnConnect && !isAliasOnboarding && !isHomeDashboard ? (
+            {wallet && !isOnConnect && !isOnboardingFlow ? (
               <View style={styles.headerRight}>
                 <Pressable
                   onPress={() => setAirplane(!airplane)}
+                  accessibilityRole="button"
+                  accessibilityLabel={airplane ? "Turn off airplane mode" : "Turn on airplane mode"}
                   style={({ pressed }) => [
-                    styles.airplaneBtn,
-                    { backgroundColor: airplane ? K.lilac : K.sky },
+                    styles.airplaneIconBtn,
+                    { backgroundColor: airplane ? K.lilac : K.white },
                     pressed && { opacity: 0.85 },
                   ]}
                 >
-                  <Text style={styles.airplaneText}>
-                    {airplane ? "✈ Airplane" : `● ${wallet.label}`}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => push("settings")}
-                  style={({ pressed }) => [styles.gearBtn, SHADOW.pill, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={{ color: K.navy, fontWeight: "800" }}>⚙</Text>
+                  <Text style={{ color: K.navy, fontSize: 14, fontWeight: "800" }}>✈</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -513,6 +553,16 @@ export function MobileShell() {
         </View>
       ) : null}
 
+      {showMainTabBar ? (
+        <MobileTabBar
+          activeTab={activeTab}
+          onInicio={onTabInicio}
+          onHistorial={onTabHistorial}
+          onContactos={onTabContactos}
+          onAjustes={onTabAjustes}
+        />
+      ) : null}
+
       {showAppSplash ? <AppOpenSplash onDismiss={() => setShowAppSplash(false)} /> : null}
     </SafeAreaView>
   )
@@ -562,8 +612,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#141b2f",
   },
-  walletPillAvatar: { width: 22, height: 22 },
+  walletPillAvatar: { width: 22, height: 22, borderRadius: 999 },
   headerMascot: { width: 30, height: 30 },
+  headerFavicon: { width: 28, height: 28, borderRadius: 999 },
+  headerLogo: { height: 22, width: 80 },
+  airplaneIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: K.green },
   airplaneBtn: {
     paddingHorizontal: 12,

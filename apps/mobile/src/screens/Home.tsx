@@ -34,19 +34,18 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
     <View>
       <View style={{ paddingTop: 8 }}>
         <Text style={styles.greeting}>
-          Hello, {(displayWalletAlias(ctx.wallet?.displayName) || "friend").toLowerCase()} 👋
+          Hi, {(displayWalletAlias(ctx.wallet?.displayName) || "friend").toLowerCase()} 👋
         </Text>
-        <Text style={styles.greetSub}>Private payments, even offline.</Text>
-        <Pressable
-          onPress={() => void Linking.openURL("https://faucet.solana.com/")}
-          style={({ pressed }) => [styles.devnetChip, pressed && { opacity: 0.85 }]}
-        >
-          <View style={styles.devnetDot} />
-          <Text style={styles.devnetText}>
-            Devnet session
-            {balance.usdc != null && balance.sol != null && balance.sol < 0.01 ? " · need SOL?" : " · faucet ↗"}
-          </Text>
-        </Pressable>
+        <Text style={styles.greetSub}>Private payments—even offline.</Text>
+        {balance.usdc != null && balance.sol != null && balance.sol < 0.01 ? (
+          <Pressable
+            onPress={() => void Linking.openURL("https://faucet.solana.com/")}
+            style={({ pressed }) => [styles.devnetChip, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.devnetDot} />
+            <Text style={styles.devnetText}>Need devnet SOL? · faucet ↗</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={[styles.balanceCard, SHADOW.card]}>
@@ -74,14 +73,13 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
       <View style={styles.tilesRow}>
         <Tile label="Pay" tint="#ede9fe" stroke="#6847e8" icon="↑" onPress={() => ctx.push("intent")} />
         <Tile label="Receive" tint="#dbefff" stroke="#0b7dd4" icon="↓" onPress={() => ctx.push("receive")} />
-        <Tile label="History" tint="#d8fae6" stroke="#0d8948" icon="⏱" onPress={() => ctx.push("history")} />
       </View>
 
       <View style={{ marginTop: 28 }}>
         <View style={styles.activityHead}>
           <Text style={styles.activityTitle}>Recent activity</Text>
           <Pressable onPress={() => ctx.push("history")}>
-            <Text style={styles.viewAll}>View all</Text>
+            <Text style={styles.viewAll}>See all</Text>
           </Pressable>
         </View>
 
