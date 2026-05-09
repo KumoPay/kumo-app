@@ -129,6 +129,8 @@ export async function privateTransfer(opts: {
   toBalance?: "base" | "ephemeral"
   memo?: string
   legacy?: boolean
+  /** "private" (default) routes through MagicBlock confidential transfer; "public" emits a plain SPL transfer. */
+  visibility?: "private" | "public"
 }): Promise<BuiltTransaction> {
   // API wants a number, not a string. USDC has 6 decimals — even Number.MAX_SAFE_INTEGER
   // covers ~9 trillion USDC, so plain number is safe here.
@@ -145,7 +147,7 @@ export async function privateTransfer(opts: {
     to: opts.toPubkey,
     mint: opts.mint ?? USDC_MINT_DEVNET,
     amount,
-    visibility: "private",
+    visibility: opts.visibility ?? "private",
     fromBalance,
     toBalance,
     cluster: CLUSTER,

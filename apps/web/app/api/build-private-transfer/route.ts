@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       toPubkey: recipientPubkey,
       amountUsdc: intent.amount_usdc,
       memo: intent.memo,
+      visibility: intent.private ? "private" : "public",
     })
     return NextResponse.json({
       ok: true,
