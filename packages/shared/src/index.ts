@@ -87,7 +87,7 @@ export function hashIntent(intent: PaymentIntent): Promise<string> {
   })
   // Works in both Node 20+ and the browser (Web Crypto).
   const enc = new TextEncoder().encode(canonical)
-  return crypto.subtle.digest("SHA-256", enc).then((buf) => {
+  return crypto.subtle.digest("SHA-256", enc as BufferSource).then((buf) => {
     return Array.from(new Uint8Array(buf))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
