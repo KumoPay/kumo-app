@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import type { Transaction, VersionedTransaction } from "@solana/web3.js"
 import type { PaymentIntent } from "@kumo/shared"
 
 export type ScreenId =
@@ -11,6 +12,7 @@ export type ScreenId =
   | "alias"
   | "enableLocalAI"
   | "enableWhisper"
+  | "enableOfflinePay"
   | "intent"
   | "sign"
   | "queued"
@@ -60,6 +62,9 @@ export type NavCtx = {
   parseIntent: () => Promise<void>
   signOffline: () => Promise<void>
   broadcast: () => Promise<void>
+  /** Raw MWA signTransaction passthrough. Screens that need to sign their own
+   *  one-off txs (e.g. EnableOfflinePay creating a nonce account) call this. */
+  signTransactionRaw?: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>
 }
 
 export type ScreenSlots = {

@@ -7,10 +7,13 @@ export type LocalHistoryEntry = {
   counterparty: string
   amount: number
   signature: string
-  status: "delivered" | "queued"
+  /** queued = submitted, awaiting confirmation; delivered = confirmed/finalized; failed = on-chain error */
+  status: "delivered" | "queued" | "failed"
   sendTo?: "base" | "ephemeral"
   validator?: string
   createdAt: number // ms epoch
+  /** Reason for failure when status === "failed". */
+  failureReason?: string
 }
 
 const KEY = "kumo.mobile.history.v1"
@@ -27,6 +30,19 @@ function isEntry(v: unknown): v is LocalHistoryEntry {
     typeof o.signature === "string" &&
     typeof o.createdAt === "number"
   )
+}
+
+export async function updateHistoryStatus(
+  id: string,
+  patch: { status: LocalHistoryEntry["status"]; failureReason?: string },
+): Promise<void> {
+  const all = await readAll()
+  const next = all.map((e) =>
+    e.id === id
+      ? { ...e, status: patch.status, failureReason: patch.failureReason }
+      : e,
+  )
+  await writeAll(next)
 }
 
 async function readAll(): Promise<LocalHistoryEntry[]> {

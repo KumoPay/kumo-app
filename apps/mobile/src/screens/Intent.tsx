@@ -16,6 +16,7 @@ import {
 } from "expo-audio"
 import { Chip, Eyebrow, PrimaryCTA } from "./atoms"
 import { K, SHADOW } from "./theme"
+import { useNetwork } from "../hooks/use-network"
 import {
   isWhisperDownloaded,
   isWhisperEnabled,
@@ -38,6 +39,7 @@ export const Intent: ScreenRenderer = (ctx) => ({
 
 function IntentBody({ ctx }: { ctx: NavCtx }) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const network = useNetwork()
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [whisperReady, setWhisperReady] = useState(false)
@@ -48,6 +50,13 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
       setWhisperReady((await isWhisperEnabled()) && (await isWhisperDownloaded()))
     })()
   }, [])
+
+  // Private mode requires a network call to MagicBlock — force public when offline.
+  useEffect(() => {
+    if (!network.online && ctx.privacyDefault) {
+      ctx.setPrivacyDefault(false)
+    }
+  }, [network.online, ctx.privacyDefault, ctx.setPrivacyDefault])
 
   async function onMicPress() {
     if (transcribing) return
@@ -110,14 +119,17 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
             {ctx.privacyDefault ? "🔒 Private (MagicBlock)" : "🌐 Public"}
           </Text>
           <Text style={styles.privacySub}>
-            {ctx.privacyDefault
-              ? "Confidential transfer · amount sealed"
-              : "Standard SPL transfer · publicly visible on-chain"}
+            {!network.online
+              ? "Private mode requires network — using public SPL transfer"
+              : ctx.privacyDefault
+                ? "Confidential transfer · amount sealed"
+                : "Standard SPL transfer · publicly visible on-chain"}
           </Text>
         </View>
         <Switch
           value={ctx.privacyDefault}
           onValueChange={ctx.setPrivacyDefault}
+          disabled={!network.online}
           trackColor={{ false: K.navy10, true: K.lilac }}
         />
       </View>
@@ -129,7 +141,7 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
           value={ctx.intentText}
           onChangeText={ctx.setIntentText}
           multiline
-          placeholder="pay alice 1 usdc privately"
+          placeholder="e.g. pay @friend 5 usdc privately"
           placeholderTextColor={K.navy40}
           style={styles.input}
         />

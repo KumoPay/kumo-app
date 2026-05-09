@@ -7,8 +7,11 @@ export const KUMO_API_BASE_URL =
 export const MAGICBLOCK_TEE_RPC =
   process.env.EXPO_PUBLIC_MAGICBLOCK_TEE_RPC ?? "https://devnet-tee.magicblock.app"
 
+// MWA shows this to the user when they connect. `uri` should be your real
+// production domain pre-launch — wallets use it to verify the dApp identity.
+// Override per-environment via EXPO_PUBLIC_APP_URI.
 export const APP_IDENTITY = {
   name: "Kumo",
-  uri: "https://kumo.app",
-  icon: "favicon.png",
+  uri: process.env.EXPO_PUBLIC_APP_URI ?? "https://kumo.app",
+  icon: "favicon-32.png",
 }

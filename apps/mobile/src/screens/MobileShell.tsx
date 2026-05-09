@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Image,
@@ -11,6 +11,7 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { MotiView, AnimatePresence } from "moti"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import bs58 from "bs58"
 import { Buffer } from "buffer"
 import { Transaction, VersionedTransaction, Connection } from "@solana/web3.js"
@@ -31,6 +32,7 @@ import { History } from "./History"
 import { Receive } from "./Receive"
 import { Settings } from "./Settings"
 import { EnableLocalAI } from "./EnableLocalAI"
+import { EnableOfflinePay } from "./EnableOfflinePay"
 import { EnableWhisper } from "./EnableWhisper"
 import { AppOpenSplash } from "./AppOpenSplash"
 import { MobileTabBar, type MobileTabId } from "./MobileTabBar"
@@ -51,13 +53,19 @@ import {
   writeStoredWallet,
 } from "./wallet-storage"
 import { resolveRecipientToPubkey } from "./contacts-store"
-import { appendHistory } from "./history-store"
+import { appendHistory, updateHistoryStatus } from "./history-store"
+import { enqueueIntent, listQueue, removeFromQueue } from "./queue-store"
+import { awaitConfirmation } from "../lib/transactions"
+import { getNonceSetup } from "../lib/durable-nonce"
+import { buildPublicTransferWithNonce } from "../lib/offline-build"
 import { isLocalAIEnabled, isModelDownloaded, parseIntentLocal } from "../lib/qvac-local"
 import { parseIntentRegex } from "../lib/regex-parser"
 import { authenticateForAction, requireForSign } from "../lib/biometric"
 import { useConnection } from "../hooks/use-connection"
+import { useNetwork } from "../hooks/use-network"
 import { useWalletAdapter } from "../hooks/use-wallet-adapter"
-import { KUMO_API_BASE_URL, MAGICBLOCK_TEE_RPC } from "../lib/config"
+import { MAGICBLOCK_TEE_RPC } from "../lib/config"
+import { getApiBaseUrl } from "../lib/runtime-config"
 
 const SCREENS: Record<ScreenId, ScreenRenderer> = {
   home: Home,
@@ -69,6 +77,7 @@ const SCREENS: Record<ScreenId, ScreenRenderer> = {
   alias: ChooseAlias,
   enableLocalAI: EnableLocalAI,
   enableWhisper: EnableWhisper,
+  enableOfflinePay: EnableOfflinePay,
   intent: Intent,
   sign: Sign,
   queued: Queued,
@@ -87,12 +96,35 @@ export function MobileShell() {
   const [bootstrapped, setBootstrapped] = useState(false)
   const [stack, setStack] = useState<ScreenId[]>(["connect"])
   const [direction, setDirection] = useState<1 | -1>(1)
-  const [airplane, setAirplane] = useState(false)
+  const [airplaneOverride, setAirplaneOverride] = useState(false)
   const [privacyDefault, setPrivacyDefault] = useState(true)
   const [wallet, setWallet] = useState<WalletInfo | null>(null)
   const [showAppSplash, setShowAppSplash] = useState(false)
 
-  const [intentText, setIntentText] = useState("pay alice 1 usdc privately")
+  const network = useNetwork()
+  /** True when offline by either real connectivity OR user-forced airplane toggle. */
+  const airplane = airplaneOverride || !network.online
+
+  /** Auto-prompt to set up nonce account the first time the user toggles airplane on. */
+  const setAirplane = useCallback(
+    (v: boolean) => {
+      setAirplaneOverride(v)
+      if (v) {
+        void (async () => {
+          const seen = await AsyncStorage.getItem("kumo.offlinePay.promptSeen").catch(() => null)
+          if (seen === "1") return
+          const setup = await getNonceSetup()
+          if (setup?.cached) return
+          await AsyncStorage.setItem("kumo.offlinePay.promptSeen", "1").catch(() => {})
+          setDirection(1)
+          setStack((s) => [...s, "enableOfflinePay"])
+        })()
+      }
+    },
+    [],
+  )
+
+  const [intentText, setIntentText] = useState("")
   const [parsedIntent, setParsedIntent] = useState<PaymentIntent | null>(null)
   const [intentHash, setIntentHash] = useState<string | null>(null)
   const [offlineSig, setOfflineSig] = useState<string | null>(null)
@@ -137,6 +169,18 @@ export function MobileShell() {
         setDirection(1)
         if (!onboarded) {
           setStack(["alias"])
+          return
+        }
+        // If there are queued offline intents from a prior session, restore the
+        // most recent one so the user lands on Queued screen ready to broadcast.
+        const queued = await listQueue()
+        const mine = queued.filter((q) => q.signerPubkey === publicKey.toBase58())
+        if (mine.length > 0) {
+          const latest = mine[mine.length - 1]
+          setParsedIntent(latest.intent)
+          setIntentHash(latest.intentHash)
+          setOfflineSig(latest.offlineSig)
+          setStack(["home", "queued"])
         } else {
           setStack(["home"])
           setShowAppSplash(true)
@@ -246,7 +290,7 @@ export function MobileShell() {
       // Tier 2: cloud QVAC server.
       if (!intent) {
         try {
-          const r = await fetch(`${KUMO_API_BASE_URL}/api/parse-intent`, {
+          const r = await fetch(`${await getApiBaseUrl()}/api/parse-intent`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text }),
@@ -266,7 +310,7 @@ export function MobileShell() {
 
       if (!intent) {
         throw new Error(
-          "I couldn't understand that. Try: 'pay alice 1 usdc privately' or 'send 5 to bob'.",
+          "I couldn't understand that. Try: 'pay <contact> 5 usdc privately' or paste a Solana address.",
         )
       }
 
@@ -294,7 +338,7 @@ export function MobileShell() {
   }, [intentText, privacyDefault])
 
   const signOffline = useCallback(async () => {
-    if (!parsedIntent || !intentHash || !signMessage) {
+    if (!parsedIntent || !intentHash || !signMessage || !publicKey) {
       setError("Wallet does not support signMessage.")
       return
     }
@@ -310,9 +354,64 @@ export function MobileShell() {
           return
         }
       }
+
+      // Always produce the proof-of-intent signature (signMessage of intent hash).
+      // Works offline because it's pure ed25519 in the wallet app.
       const message = new TextEncoder().encode(`Kumo offline intent: ${intentHash}`)
       const sig = await signMessage(message)
-      setOfflineSig(bs58.encode(sig))
+      const offlineSigB58 = bs58.encode(sig)
+      setOfflineSig(offlineSigB58)
+
+      // Offline + nonce ready → build the actual SPL transfer locally and pre-sign
+      // it so broadcast later requires only sendRawTransaction. Forces public mode.
+      let signedTxBase64: string | undefined
+      let txVersion: "legacy" | "v0" | undefined
+      let sendTo: "base" | "ephemeral" | undefined
+      if (!network.online) {
+        const setup = await getNonceSetup()
+        if (!setup?.cached?.value) {
+          throw new Error(
+            "You're offline and offline payments aren't set up yet. Reconnect to set up, or try again online.",
+          )
+        }
+        const recipientPubkey = await resolveRecipientToPubkey(parsedIntent.recipient)
+        if (!recipientPubkey) {
+          throw new Error(
+            `No contact "${parsedIntent.recipient}" found. Add them in Contacts first or paste a Solana address.`,
+          )
+        }
+        const built = buildPublicTransferWithNonce({
+          fromPubkey: publicKey.toBase58(),
+          toPubkey: recipientPubkey,
+          amountUsdc: parsedIntent.amount_usdc,
+          memo: parsedIntent.memo,
+          nonce: {
+            pubkey: setup.noncePubkey,
+            authority: setup.authority,
+            value: setup.cached.value,
+          },
+        })
+        if (!signTransaction) {
+          throw new Error("Wallet does not support signTransaction.")
+        }
+        const txBytes = Buffer.from(built.transactionBase64, "base64")
+        const tx = Transaction.from(txBytes)
+        const signed = await signTransaction(tx)
+        signedTxBase64 = Buffer.from(signed.serialize()).toString("base64")
+        txVersion = built.version
+        sendTo = built.sendTo
+      }
+
+      // Persist (with pre-signed tx if we built one) so it survives app restart.
+      await enqueueIntent({
+        intent: parsedIntent,
+        intentHash,
+        offlineSig: offlineSigB58,
+        signerPubkey: publicKey.toBase58(),
+        signedTxBase64,
+        txVersion,
+        sendTo,
+      })
       setDirection(1)
       setStack((s) => [...s, "queued"])
     } catch (e) {
@@ -321,16 +420,71 @@ export function MobileShell() {
     } finally {
       setBusy(false)
     }
-  }, [parsedIntent, intentHash, signMessage])
+  }, [parsedIntent, intentHash, signMessage, publicKey, network.online, signTransaction])
 
   const broadcast = useCallback(async () => {
     if (!parsedIntent || !publicKey || !signTransaction) {
       setError("Wallet does not support signTransaction.")
       return
     }
+    if (!network.online) {
+      setError("You're offline. Connect to a network to broadcast.")
+      return
+    }
     setError(null)
     setBusy(true)
     try {
+      // Fast path: a pre-signed offline tx is already queued for THIS intent.
+      // No biometric, no rebuild, no resign — just submit.
+      let preSigned: { tx: Buffer; sendTo: "base" | "ephemeral"; version: "legacy" | "v0" } | null = null
+      if (intentHash) {
+        const queue = await listQueue()
+        const match = queue.find((q) => q.intentHash === intentHash && q.signedTxBase64)
+        if (match?.signedTxBase64) {
+          preSigned = {
+            tx: Buffer.from(match.signedTxBase64, "base64"),
+            sendTo: match.sendTo ?? "base",
+            version: match.txVersion ?? "legacy",
+          }
+        }
+      }
+
+      if (preSigned) {
+        const conn =
+          preSigned.sendTo === "ephemeral"
+            ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
+            : connection
+        const signature = await conn.sendRawTransaction(preSigned.tx)
+        setSettlement({ signature, sendTo: preSigned.sendTo })
+        const entry = await appendHistory({
+          direction: "out",
+          counterparty: parsedIntent.recipient,
+          amount: parsedIntent.amount_usdc,
+          signature,
+          status: "queued",
+          sendTo: preSigned.sendTo,
+        })
+        void awaitConfirmation({ signature, sendTo: preSigned.sendTo }).then((res) => {
+          if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
+          else
+            void updateHistoryStatus(entry.id, {
+              status: "failed",
+              failureReason: res.error,
+            })
+        })
+        if (intentHash) {
+          const pending = await listQueue()
+          for (const q of pending) {
+            if (q.intentHash === intentHash) await removeFromQueue(q.id)
+          }
+        }
+        setAirplane(false)
+        setDirection(1)
+        setStack((s) => [...s, "settled"])
+        return
+      }
+
+      // Standard path: build + sign + submit.
       if (await requireForSign()) {
         const ok = await authenticateForAction(
           `Confirm payment · ${parsedIntent.amount_usdc} USDC to ${parsedIntent.recipient}`,
@@ -346,7 +500,7 @@ export function MobileShell() {
           `No contact "${parsedIntent.recipient}" found. Add them in Contacts first or paste a Solana address.`,
         )
       }
-      const r = await fetch(`${KUMO_API_BASE_URL}/api/build-private-transfer`, {
+      const r = await fetch(`${await getApiBaseUrl()}/api/build-private-transfer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -372,16 +526,36 @@ export function MobileShell() {
           : connection
       const signature = await conn.sendRawTransaction(signed.serialize())
       setSettlement({ signature, validator: j.validator, sendTo: j.send_to })
-      // Persist to local history so it shows up on Home/History without needing on-chain re-fetch.
-      void appendHistory({
+      // Persist as queued; the poller below upgrades to delivered/failed.
+      const entry = await appendHistory({
         direction: "out",
         counterparty: parsedIntent.recipient,
         amount: parsedIntent.amount_usdc,
         signature,
-        status: "delivered",
+        status: "queued",
         sendTo: j.send_to,
         validator: j.validator,
       })
+      // Fire-and-forget confirmation poll. Updates status when chain confirms.
+      void awaitConfirmation({ signature, sendTo: j.send_to }).then((res) => {
+        if (res.ok) {
+          void updateHistoryStatus(entry.id, { status: "delivered" })
+        } else {
+          void updateHistoryStatus(entry.id, {
+            status: "failed",
+            failureReason: res.error,
+          })
+        }
+      })
+      // Drain any queued intent for this exact intent hash (broadcast consumed it).
+      if (intentHash) {
+        const pending = await listQueue()
+        for (const q of pending) {
+          if (q.intentHash === intentHash) {
+            await removeFromQueue(q.id)
+          }
+        }
+      }
       setAirplane(false)
       setDirection(1)
       setStack((s) => [...s, "settled"])
@@ -391,7 +565,7 @@ export function MobileShell() {
     } finally {
       setBusy(false)
     }
-  }, [parsedIntent, publicKey, signTransaction, connection])
+  }, [parsedIntent, publicKey, signTransaction, connection, network.online, setAirplane, intentHash])
 
   const ctx: NavCtx = useMemo(
     () => ({
@@ -400,14 +574,62 @@ export function MobileShell() {
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, setIntentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
+      signTransactionRaw: signTransaction,
     }),
     [
       push, back, resetHome, goToNewPayment, airplane, privacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
+      signTransaction,
     ],
   )
+
+  // Auto-broadcast: when network flips false → true and we have pre-signed
+  // intents queued, drain them in the background. Updates history live via the
+  // confirmation poller; user sees status pill flip from pending → delivered.
+  const wasOnlineRef = useRef(network.online)
+  useEffect(() => {
+    const wasOnline = wasOnlineRef.current
+    wasOnlineRef.current = network.online
+    if (wasOnline || !network.online || !publicKey) return
+    void (async () => {
+      const queue = await listQueue()
+      const mine = queue.filter(
+        (q) => q.signedTxBase64 && q.signerPubkey === publicKey.toBase58(),
+      )
+      for (const q of mine) {
+        try {
+          const txBytes = Buffer.from(q.signedTxBase64!, "base64")
+          const conn =
+            q.sendTo === "ephemeral"
+              ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
+              : connection
+          const signature = await conn.sendRawTransaction(txBytes)
+          const entry = await appendHistory({
+            direction: "out",
+            counterparty: q.intent.recipient,
+            amount: q.intent.amount_usdc,
+            signature,
+            status: "queued",
+            sendTo: q.sendTo ?? "base",
+          })
+          await removeFromQueue(q.id)
+          void awaitConfirmation({ signature, sendTo: q.sendTo ?? "base" }).then((res) => {
+            if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
+            else
+              void updateHistoryStatus(entry.id, {
+                status: "failed",
+                failureReason: res.error,
+              })
+          })
+        } catch (e) {
+          console.warn("auto-broadcast failed for", q.id, e)
+          // Leave in queue so the user can retry manually from the Queued screen.
+        }
+      }
+    })()
+  }, [network.online, publicKey, connection])
 
   const slots = SCREENS[current](ctx)
 

@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { PaymentIntentSchema, type PaymentIntent } from "@kumo/shared"
-import { KUMO_API_BASE_URL } from "./config"
+import { getApiBaseUrl } from "./runtime-config"
 
 const ParseIntentResponseSchema = z.union([
   z.object({ ok: z.literal(true), intent: PaymentIntentSchema }),
@@ -24,12 +24,12 @@ const BuildTransferResponseSchema = z.union([
 
 export type BuiltTransfer = z.infer<typeof BuiltTransferSchema>
 
-function apiUrl(path: string): string {
-  return new URL(path, KUMO_API_BASE_URL).toString()
+async function apiUrl(path: string): Promise<string> {
+  return new URL(path, await getApiBaseUrl()).toString()
 }
 
 export async function parseIntent(text: string): Promise<PaymentIntent> {
-  const res = await fetch(apiUrl("/api/parse-intent"), {
+  const res = await fetch(await apiUrl("/api/parse-intent"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -48,7 +48,7 @@ export async function buildPrivateTransfer(opts: {
   recipientPubkey: string
   userPubkey: string
 }): Promise<BuiltTransfer> {
-  const res = await fetch(apiUrl("/api/build-private-transfer"), {
+  const res = await fetch(await apiUrl("/api/build-private-transfer"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
