@@ -18,8 +18,7 @@ export const Connect: ScreenRenderer = (ctx) => ({
       <View style={[styles.card, SHADOW.card]}>
         <WalletRow name="Phantom"  logo={ASSETS.walletPhantom}  onPress={() => void ctx.beginWalletConnect("phantom")}  disabled={ctx.busy} divider />
         <WalletRow name="Solflare" logo={ASSETS.walletSolflare} onPress={() => void ctx.beginWalletConnect("solflare")} disabled={ctx.busy} divider />
-        <WalletRow name="Backpack" logo={ASSETS.walletBackpack} onPress={() => void ctx.beginWalletConnect("backpack")} disabled={ctx.busy} divider />
-        <WalletRow name="Glow"     logo={ASSETS.walletGlow}     onPress={() => void ctx.beginWalletConnect("glow")}     disabled={ctx.busy} />
+        <WalletRow name="Backpack" logo={ASSETS.walletBackpack} onPress={() => void ctx.beginWalletConnect("backpack")} disabled={ctx.busy} />
       </View>
 
       {ctx.error ? <Text style={styles.error}>{ctx.error}</Text> : null}

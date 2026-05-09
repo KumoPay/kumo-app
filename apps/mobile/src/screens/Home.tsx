@@ -1,4 +1,4 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native"
+import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import { useBalance } from "../hooks/use-balance"
 import { displayWalletAlias } from "./alias-utils"
 import { K, SHADOW } from "./theme"
@@ -37,6 +37,16 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
           Hello, {(displayWalletAlias(ctx.wallet?.displayName) || "friend").toLowerCase()} 👋
         </Text>
         <Text style={styles.greetSub}>Private payments, even offline.</Text>
+        <Pressable
+          onPress={() => void Linking.openURL("https://faucet.solana.com/")}
+          style={({ pressed }) => [styles.devnetChip, pressed && { opacity: 0.85 }]}
+        >
+          <View style={styles.devnetDot} />
+          <Text style={styles.devnetText}>
+            Devnet session
+            {balance.usdc != null && balance.sol != null && balance.sol < 0.01 ? " · need SOL?" : " · faucet ↗"}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={[styles.balanceCard, SHADOW.card]}>
@@ -153,6 +163,19 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   greetSub: { marginTop: 6, fontSize: 14, color: "#6b7380", fontWeight: "600" },
+  devnetChip: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: K.sky50,
+    borderRadius: 999,
+  },
+  devnetDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: K.cyan },
+  devnetText: { fontSize: 11, fontWeight: "800", color: K.navy },
   balanceCard: {
     flexDirection: "row",
     marginTop: 22,

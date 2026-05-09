@@ -1,10 +1,84 @@
+import { useEffect, useState } from "react"
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native"
 import { Eyebrow, SecondaryCTA } from "./atoms"
 import { K, SHADOW } from "./theme"
+import {
+  LOCAL_AI,
+  deleteModel,
+  isLocalAIEnabled,
+  isModelDownloaded,
+  setLocalAIEnabled,
+} from "../lib/qvac-local"
+import {
+  WHISPER,
+  deleteWhisper,
+  isWhisperDownloaded,
+  isWhisperEnabled,
+  setWhisperEnabled,
+} from "../lib/whisper-local"
+import {
+  getBiometricLabel,
+  isBiometricAvailable,
+  requireForSign,
+  setRequireForSign,
+} from "../lib/biometric"
 import type { ScreenRenderer } from "./types"
 
 export const Settings: ScreenRenderer = (ctx) => ({
-  body: (
+  body: <SettingsBody ctx={ctx} />,
+})
+
+function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiDownloaded, setAiDownloaded] = useState(false)
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [voiceDownloaded, setVoiceDownloaded] = useState(false)
+  const [bioRequire, setBioRequire] = useState(false)
+  const [bioAvailable, setBioAvailable] = useState(false)
+  const [bioLabel, setBioLabel] = useState("Device biometric")
+
+  useEffect(() => {
+    void (async () => {
+      setAiEnabled(await isLocalAIEnabled())
+      setAiDownloaded(await isModelDownloaded())
+      setVoiceEnabled(await isWhisperEnabled())
+      setVoiceDownloaded(await isWhisperDownloaded())
+      setBioRequire(await requireForSign())
+      setBioAvailable(await isBiometricAvailable())
+      setBioLabel(await getBiometricLabel())
+    })()
+  }, [])
+
+  async function onToggleBio(v: boolean) {
+    setBioRequire(v)
+    await setRequireForSign(v)
+  }
+
+  async function onToggleAi(v: boolean) {
+    setAiEnabled(v)
+    await setLocalAIEnabled(v)
+  }
+
+  async function onDeleteModel() {
+    await deleteModel()
+    setAiDownloaded(false)
+    setAiEnabled(false)
+    await setLocalAIEnabled(false)
+  }
+
+  async function onToggleVoice(v: boolean) {
+    setVoiceEnabled(v)
+    await setWhisperEnabled(v)
+  }
+
+  async function onDeleteVoice() {
+    await deleteWhisper()
+    setVoiceDownloaded(false)
+    setVoiceEnabled(false)
+    await setWhisperEnabled(false)
+  }
+
+  return (
     <View>
       <Text style={styles.h1}>Settings</Text>
       <Text style={styles.sub}>Wallet, network, and demo controls.</Text>
@@ -55,6 +129,92 @@ export const Settings: ScreenRenderer = (ctx) => ({
       )}
 
       <View style={{ marginTop: 14 }}>
+        <Eyebrow>On-device AI</Eyebrow>
+        <View style={[styles.card, SHADOW.pill, styles.row]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardKey}>{LOCAL_AI.modelName}</Text>
+            <Text style={styles.cardSub}>
+              {aiDownloaded
+                ? "Downloaded · intent parsing runs on this device"
+                : `Not downloaded · falls back to cloud QVAC server`}
+            </Text>
+          </View>
+          {aiDownloaded ? (
+            <Switch
+              value={aiEnabled}
+              onValueChange={onToggleAi}
+              trackColor={{ false: K.navy10, true: K.cyan }}
+            />
+          ) : (
+            <Pressable
+              onPress={() => ctx.push("enableLocalAI")}
+              style={({ pressed }) => [styles.miniBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.miniBtnText}>Download {LOCAL_AI.estimatedSizeLabel}</Text>
+            </Pressable>
+          )}
+        </View>
+        {aiDownloaded && (
+          <View style={{ marginTop: 10 }}>
+            <SecondaryCTA onPress={onDeleteModel}>Delete model</SecondaryCTA>
+          </View>
+        )}
+      </View>
+
+      <View style={{ marginTop: 14 }}>
+        <Eyebrow>Security</Eyebrow>
+        <View style={[styles.card, SHADOW.pill, styles.row]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardKey}>Require biometric to sign</Text>
+            <Text style={styles.cardSub}>
+              {bioAvailable
+                ? `${bioLabel} prompt before each payment`
+                : "No biometric enrolled on this device"}
+            </Text>
+          </View>
+          <Switch
+            value={bioRequire}
+            onValueChange={onToggleBio}
+            disabled={!bioAvailable}
+            trackColor={{ false: K.navy10, true: K.cyan }}
+          />
+        </View>
+      </View>
+
+      <View style={{ marginTop: 14 }}>
+        <Eyebrow>Voice input (Whisper)</Eyebrow>
+        <View style={[styles.card, SHADOW.pill, styles.row]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardKey}>{WHISPER.modelName}</Text>
+            <Text style={styles.cardSub}>
+              {voiceDownloaded
+                ? "Downloaded · tap the mic on Intent to dictate"
+                : "Not downloaded · enable to speak instead of type"}
+            </Text>
+          </View>
+          {voiceDownloaded ? (
+            <Switch
+              value={voiceEnabled}
+              onValueChange={onToggleVoice}
+              trackColor={{ false: K.navy10, true: K.lilac }}
+            />
+          ) : (
+            <Pressable
+              onPress={() => ctx.push("enableWhisper")}
+              style={({ pressed }) => [styles.miniBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.miniBtnText}>Download {WHISPER.estimatedSizeLabel}</Text>
+            </Pressable>
+          )}
+        </View>
+        {voiceDownloaded && (
+          <View style={{ marginTop: 10 }}>
+            <SecondaryCTA onPress={onDeleteVoice}>Delete voice model</SecondaryCTA>
+          </View>
+        )}
+      </View>
+
+      <View style={{ marginTop: 14 }}>
         <Eyebrow>Quick links</Eyebrow>
         <Pressable
           onPress={() => ctx.push("contacts")}
@@ -79,8 +239,8 @@ export const Settings: ScreenRenderer = (ctx) => ({
         </Pressable>
       </View>
     </View>
-  ),
-})
+  )
+}
 
 const styles = StyleSheet.create({
   h1: { fontSize: 24, fontWeight: "900", letterSpacing: -0.5, color: K.navy },
@@ -96,4 +256,11 @@ const styles = StyleSheet.create({
   cardVal: { fontSize: 14, fontWeight: "800", color: K.navy, marginTop: 4 },
   cardSub: { fontSize: 12, color: K.navy55, marginTop: 4 },
   chevron: { fontSize: 22, color: K.navy30, fontWeight: "700" },
+  miniBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: K.cyan,
+  },
+  miniBtnText: { color: K.navy, fontSize: 12, fontWeight: "900" },
 })

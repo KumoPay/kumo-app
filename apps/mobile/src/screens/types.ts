@@ -9,6 +9,8 @@ export type ScreenId =
   | "settings"
   | "connect"
   | "alias"
+  | "enableLocalAI"
+  | "enableWhisper"
   | "intent"
   | "sign"
   | "queued"
@@ -37,6 +39,9 @@ export type NavCtx = {
   resetHome: () => void
   airplane: boolean
   setAirplane: (v: boolean) => void
+  /** Default privacy mode for parsed intents (Public SPL vs MagicBlock private). */
+  privacyDefault: boolean
+  setPrivacyDefault: (v: boolean) => void
   wallet: WalletInfo | null
   beginWalletConnect: (brand: string) => Promise<void>
   disconnectWallet: () => void

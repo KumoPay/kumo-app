@@ -30,6 +30,8 @@ import { Contacts } from "./Contacts"
 import { History } from "./History"
 import { Receive } from "./Receive"
 import { Settings } from "./Settings"
+import { EnableLocalAI } from "./EnableLocalAI"
+import { EnableWhisper } from "./EnableWhisper"
 import { AppOpenSplash } from "./AppOpenSplash"
 import {
   PAY_FLOW,
@@ -49,6 +51,9 @@ import {
 } from "./wallet-storage"
 import { resolveRecipientToPubkey } from "./contacts-store"
 import { appendHistory } from "./history-store"
+import { isLocalAIEnabled, isModelDownloaded, parseIntentLocal } from "../lib/qvac-local"
+import { parseIntentRegex } from "../lib/regex-parser"
+import { authenticateForAction, requireForSign } from "../lib/biometric"
 import { useConnection } from "../hooks/use-connection"
 import { useWalletAdapter } from "../hooks/use-wallet-adapter"
 import { KUMO_API_BASE_URL, MAGICBLOCK_TEE_RPC } from "../lib/config"
@@ -61,6 +66,8 @@ const SCREENS: Record<ScreenId, ScreenRenderer> = {
   settings: Settings,
   connect: Connect,
   alias: ChooseAlias,
+  enableLocalAI: EnableLocalAI,
+  enableWhisper: EnableWhisper,
   intent: Intent,
   sign: Sign,
   queued: Queued,
@@ -80,6 +87,7 @@ export function MobileShell() {
   const [stack, setStack] = useState<ScreenId[]>(["connect"])
   const [direction, setDirection] = useState<1 | -1>(1)
   const [airplane, setAirplane] = useState(false)
+  const [privacyDefault, setPrivacyDefault] = useState(true)
   const [wallet, setWallet] = useState<WalletInfo | null>(null)
   const [showAppSplash, setShowAppSplash] = useState(false)
 
@@ -174,8 +182,8 @@ export function MobileShell() {
       })
       void writeAliasOnboardingComplete()
       setDirection(1)
-      setStack(["home"])
-      setShowAppSplash(true)
+      // After alias onboarding, prompt for on-device AI download (one-time).
+      setStack(["enableLocalAI"])
     },
     [],
   )
@@ -211,14 +219,49 @@ export function MobileShell() {
     setError(null)
     setBusy(true)
     try {
-      const r = await fetch(`${KUMO_API_BASE_URL}/api/parse-intent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: intentText.trim() }),
-      })
-      const j = await r.json()
-      if (!j.ok) throw new Error(j.error)
-      const intent = j.intent as PaymentIntent
+      const text = intentText.trim()
+      let intent: PaymentIntent | null = null
+
+      // Tier 1: on-device LLM (if user enabled it AND model is downloaded).
+      const useLocal = (await isLocalAIEnabled()) && (await isModelDownloaded())
+      if (useLocal) {
+        try {
+          intent = await parseIntentLocal(text)
+        } catch (e) {
+          console.warn("local parse failed, falling through:", e)
+        }
+      }
+
+      // Tier 2: cloud QVAC server.
+      if (!intent) {
+        try {
+          const r = await fetch(`${KUMO_API_BASE_URL}/api/parse-intent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          })
+          const j = await r.json()
+          if (j.ok) intent = j.intent as PaymentIntent
+          else console.warn("cloud parse failed, falling through:", j.error)
+        } catch (e) {
+          console.warn("cloud parse network error, falling through:", e)
+        }
+      }
+
+      // Tier 3: regex parser — last-resort, deterministic, no internet/model needed.
+      if (!intent) {
+        intent = parseIntentRegex(text)
+      }
+
+      if (!intent) {
+        throw new Error(
+          "I couldn't understand that. Try: 'pay alice 1 usdc privately' or 'send 5 to bob'.",
+        )
+      }
+
+      // The intent's `private` field is now decided by the UI toggle, not just the wording.
+      // The toggle's default is `true` (MagicBlock private). User can flip to public anytime.
+      intent = { ...intent, private: privacyDefault }
       setParsedIntent(intent)
       const canonical = JSON.stringify({
         recipient: intent.recipient,
@@ -237,7 +280,7 @@ export function MobileShell() {
     } finally {
       setBusy(false)
     }
-  }, [intentText])
+  }, [intentText, privacyDefault])
 
   const signOffline = useCallback(async () => {
     if (!parsedIntent || !intentHash || !signMessage) {
@@ -247,6 +290,15 @@ export function MobileShell() {
     setError(null)
     setBusy(true)
     try {
+      if (await requireForSign()) {
+        const ok = await authenticateForAction(
+          `Sign intent · ${parsedIntent.amount_usdc} USDC to ${parsedIntent.recipient}`,
+        )
+        if (!ok) {
+          setError("Biometric not approved.")
+          return
+        }
+      }
       const message = new TextEncoder().encode(`Kumo offline intent: ${intentHash}`)
       const sig = await signMessage(message)
       setOfflineSig(bs58.encode(sig))
@@ -268,6 +320,15 @@ export function MobileShell() {
     setError(null)
     setBusy(true)
     try {
+      if (await requireForSign()) {
+        const ok = await authenticateForAction(
+          `Confirm payment · ${parsedIntent.amount_usdc} USDC to ${parsedIntent.recipient}`,
+        )
+        if (!ok) {
+          setError("Biometric not approved.")
+          return
+        }
+      }
       const recipientPubkey = await resolveRecipientToPubkey(parsedIntent.recipient)
       if (!recipientPubkey) {
         throw new Error(
@@ -324,12 +385,13 @@ export function MobileShell() {
   const ctx: NavCtx = useMemo(
     () => ({
       push, back, resetHome, airplane, setAirplane,
+      privacyDefault, setPrivacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, setIntentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
     }),
     [
-      push, back, resetHome, airplane,
+      push, back, resetHome, airplane, privacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, parsedIntent, intentHash, offlineSig, settlement,
       busy, error, parseIntent, signOffline, broadcast,
