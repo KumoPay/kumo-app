@@ -26,6 +26,9 @@ skills-lock.json
 
 # Local/generated demo artifacts
 apps/desktop/tsconfig.tsbuildinfo
+apps/mobile/.expo
+apps/mobile/android
+apps/mobile/tsconfig.tsbuildinfo
 demo-keypair.json
 
 # Design source exports

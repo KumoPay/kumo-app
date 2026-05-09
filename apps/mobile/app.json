@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Kumo",
+    "slug": "kumo-mobile",
+    "scheme": "kumo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "app.kumo.mobile"
+    },
+    "plugins": ["expo-router", "expo-dev-client"]
+  }
+}

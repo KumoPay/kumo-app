@@ -1,0 +1,41 @@
+{
+  "name": "mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint in mobile' && exit 0"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.2",
+    "@kumo/shared": "workspace:*",
+    "@solana-mobile/mobile-wallet-adapter-protocol": "^2.2.8",
+    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "^2.2.8",
+    "@solana/web3.js": "^1.95.4",
+    "base-64": "^1.0.0",
+    "bs58": "^6.0.0",
+    "buffer": "^6.0.3",
+    "expo": "^55.0.23",
+    "expo-crypto": "^55.0.14",
+    "expo-dev-client": "^55.0.32",
+    "expo-linking": "^55.0.15",
+    "expo-router": "^55.0.14",
+    "expo-status-bar": "^55.0.6",
+    "react": "19.1.0",
+    "react-native": "0.83.6",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-quick-crypto": "^0.7.17",
+    "react-native-url-polyfill": "^2.0.0",
+    "text-encoding": "^0.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/base-64": "^1.0.2",
+    "@types/react": "~19.1.0",
+    "@types/text-encoding": "^0.0.40",
+    "typescript": "^5.5.4"
+  }
+}
