@@ -7,12 +7,12 @@ import { displayWalletAlias } from "../alias-utils"
 import { useBalance } from "../use-balance"
 import { useTxHistory } from "../use-tx-history"
 import type { ScreenRenderer } from "./types"
-import { DEMO_HISTORY } from "./mock-history"
+import { mock } from "./mock"
 
 const formatUsdc = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-/** Home dashboard — real USDC balance, real-on-chain history (with demo fallback). */
+/** Home — greeting shows alias only (no .kumo). Real USDC balance + on-chain history with demo fallback. */
 export const Home: ScreenRenderer = (ctx) => ({
   body: <HomeBody ctx={ctx} />,
   cta: (
@@ -30,24 +30,30 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
   const tokenDisplay = balance.usdc != null ? Math.floor(balance.usdc * 100) / 100 : null
 
   const liveEntries = history.entries.length > 0
-  const slice = liveEntries ? history.entries.slice(0, 3) : DEMO_HISTORY.slice(0, 3)
+  const slice = liveEntries
+    ? history.entries.slice(0, 3)
+    : mock.history.slice(0, 3).map((h) => ({
+        id: h.id,
+        direction: h.direction,
+        counterparty: h.counterparty,
+        amount: h.amount as number | null,
+        when: h.when,
+      }))
 
   return (
     <div className="-mx-5 min-h-full bg-[#f9fafb] px-5 pb-2 pt-0">
       <div className="mx-auto w-full max-w-[320px]">
         <div className="pt-4">
           <h1 className="font-display font-black leading-none tracking-[-0.03em] text-[#141b2f] text-[26px]">
-            Hello,&nbsp;
-            <span className="lowercase">
-              {displayWalletAlias(ctx.wallet?.displayName) || "friend"}
-            </span>
+            Hi,&nbsp;
+            <span>{displayWalletAlias(ctx.wallet?.displayName) || "friend"}</span>
             &nbsp;
             <span aria-hidden className="inline-block translate-y-[1px]">
               👋
             </span>
           </h1>
           <p className="mt-2 text-[14px] font-medium leading-snug text-[#6b7380]">
-            Private payments, even offline.
+            Private payments—even offline.
           </p>
         </div>
 
@@ -58,7 +64,7 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             </div>
             <div className="mt-2 font-display font-black tabular-nums text-[clamp(30px,8vw,36px)] leading-none tracking-[-0.03em] text-[#111827]">
               {balance.loading && balance.usdc == null ? (
-                <span className="inline-block w-[140px] h-[34px] rounded-md bg-slate-100 animate-pulse" />
+                <span className="inline-block h-[34px] w-[140px] animate-pulse rounded-md bg-slate-100" />
               ) : (
                 <>${formatUsdc(usdcDisplay)}</>
               )}
@@ -80,8 +86,17 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
 
           <div
             aria-hidden
-            className="relative flex w-[38%] min-w-[116px] max-w-[152px] shrink-0 items-end justify-end pr-5 pb-4 pt-6 pl-1"
+            className="relative flex w-[38%] min-w-[128px] max-w-[176px] shrink-0 items-end justify-end pr-5 pb-4 pt-6 pl-1"
           >
+            <div className="pointer-events-none absolute bottom-1 right-3 z-0 h-[148px] w-[150px] rounded-full bg-lilac/35 blur-2xl" />
+            <div className="pointer-events-none absolute bottom-2 right-6 z-0 h-[92px] w-[108px] rounded-full bg-[#ede9fe]/90 blur-xl" />
+            <div
+              className="pointer-events-none absolute bottom-0 right-0 z-0 h-[128px] w-[128px] opacity-80"
+              style={{
+                background:
+                  "radial-gradient(ellipse 100% 95% at 85% 95%, rgba(199,181,255,0.45) 0%, rgba(237,233,254,0.12) 48%, transparent 68%)",
+              }}
+            />
             <Image
               src="/state-06.png"
               alt=""
@@ -89,12 +104,12 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
               height={400}
               priority
               draggable={false}
-              className="h-[min(118px,31vw)] w-auto max-h-[124px] select-none object-contain object-bottom"
+              className="relative z-[1] h-[min(154px,39vw)] w-auto max-h-[160px] select-none object-contain object-bottom"
             />
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2.5">
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
           <DashboardTile
             label="Pay"
             tint="#ede9fe"
@@ -109,13 +124,6 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             onClick={() => ctx.push("receive")}
             icon={<ArrowDown />}
           />
-          <DashboardTile
-            label="History"
-            tint="#d8fae6"
-            iconStroke="#0d8948"
-            onClick={() => ctx.push("history")}
-            icon={<ClockHistory />}
-          />
         </div>
 
         <div className="mt-9">
@@ -128,14 +136,15 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
               onClick={() => ctx.push("history")}
               className="shrink-0 text-[14px] font-bold text-[#7c5cff] transition-opacity hover:opacity-85"
             >
-              View all
+              See all
             </button>
           </div>
 
           <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_10px_36px_-10px_rgba(15,23,42,0.09)] ring-1 ring-black/[0.03]">
             {slice.map((h, i) => {
-              const initial = (h.counterparty.charAt(0) || "?").toUpperCase()
-              const bg = h.direction === "out" ? "#e8e0ff" : "#d4f5e6"
+              const contact = mock.contacts.find((c) => c.id === h.counterparty)
+              const initial = contact?.initial ?? h.counterparty.slice(0, 1).toUpperCase()
+              const bg = contact?.bg ?? (h.direction === "out" ? "#e8e0ff" : "#d4f5e6")
               const title = h.direction === "out" ? `To ${h.counterparty}` : `From ${h.counterparty}`
               const amountPrefix = h.direction === "out" ? "−" : "+"
               const statusLabel = h.direction === "out" ? "sent" : "received"
@@ -158,7 +167,7 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
                     {initial}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-extrabold leading-tight text-[#131b34]">
+                    <div className="truncate text-[15px] font-extrabold capitalize leading-tight text-[#131b34]">
                       {title}
                     </div>
                     <div className="mt-1 text-[12px] font-semibold capitalize text-[#8b929d]">
@@ -178,11 +187,11 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             })}
           </div>
 
-          {!liveEntries && (
-            <div className="mt-2 text-[11px] text-navy/45 text-center font-semibold">
+          {!liveEntries ? (
+            <div className="mt-2 text-center text-[11px] font-semibold text-navy/45">
               No on-chain activity yet — showing example entries.
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="h-3" aria-hidden />
@@ -268,15 +277,6 @@ function ArrowDown() {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
       <path d="M12 5v14M12 19l6-6M12 19l-6-6M5 21h14" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function ClockHistory() {
-  return (
-    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
-      <circle cx={12} cy={12} r={9} />
-      <path d="M12 7v6l4 3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

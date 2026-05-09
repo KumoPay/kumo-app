@@ -37,6 +37,11 @@ import {
   writeAliasOnboardingComplete,
   writeStoredWallet,
 } from "./wallet-storage"
+import {
+  readStoredCluster,
+  writeStoredCluster,
+  type SolanaClusterId,
+} from "./cluster-preference"
 
 const MAGICBLOCK_TEE_RPC =
   process.env.NEXT_PUBLIC_MAGICBLOCK_TEE_RPC ?? "https://devnet-tee.magicblock.app"
@@ -114,6 +119,8 @@ export function MobileShell() {
   const [stack, setStack] = useState<ScreenId[]>(["connect"])
   const [direction, setDirection] = useState<1 | -1>(1)
   const [airplane, setAirplane] = useState(false)
+  const [solanaCluster, setSolanaClusterState] =
+    useState<SolanaClusterId>(readStoredCluster)
   const [wallet, setWallet] = useState<WalletInfo | null>(null)
   const [showAppSplash, setShowAppSplash] = useState(false)
 
@@ -205,6 +212,22 @@ export function MobileShell() {
     setOfflineSig(null)
     setSettlement(null)
     setError(null)
+  }, [])
+
+  const goToNewPayment = useCallback(() => {
+    setDirection(1)
+    setIntentText("")
+    setParsedIntent(null)
+    setIntentHash(null)
+    setOfflineSig(null)
+    setSettlement(null)
+    setError(null)
+    setStack(["home", "intent"])
+  }, [])
+
+  const setSolanaCluster = useCallback((id: SolanaClusterId) => {
+    setSolanaClusterState(id)
+    writeStoredCluster(id)
   }, [])
 
   const completeAliasOnboarding = useCallback((localHandle: string) => {
@@ -385,8 +408,11 @@ export function MobileShell() {
       push,
       back,
       resetHome,
+      goToNewPayment,
       airplane,
       setAirplane,
+      solanaCluster,
+      setSolanaCluster,
       wallet,
       beginWalletConnect,
       disconnectWallet,
@@ -407,7 +433,10 @@ export function MobileShell() {
       push,
       back,
       resetHome,
+      goToNewPayment,
       airplane,
+      solanaCluster,
+      setSolanaCluster,
       wallet,
       beginWalletConnect,
       disconnectWallet,

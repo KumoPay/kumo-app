@@ -1,90 +1,148 @@
 "use client"
 
-import { SecondaryCTA } from "./atoms"
-import type { ScreenRenderer } from "./types"
-import { DEMO_HISTORY } from "./mock-history"
-import { useTxHistory } from "../use-tx-history"
+import Image from "next/image"
 
-const formatUsdc = (n: number) =>
-  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+import { useTxHistory } from "../use-tx-history"
+import type { ScreenRenderer } from "./types"
+import { mock, type HistoryEntry } from "./mock"
+
+const purple = "#7B61FF"
+
+function formatAmount(n: number) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "")
+}
+
+function statusLabel(status: HistoryEntry["status"]) {
+  return status === "queued" ? "pending" : "delivered"
+}
+
+function statusColor(status: HistoryEntry["status"]) {
+  return status === "queued" ? "#ea580c" : "#16a34a"
+}
+
+function initialForEntry(h: HistoryEntry) {
+  const c = mock.contacts.find((x) => x.id === h.counterparty)
+  return c?.initial ?? h.counterparty.charAt(0).toUpperCase()
+}
 
 export const History: ScreenRenderer = (ctx) => ({
   body: <HistoryBody ctx={ctx} />,
-  cta: <SecondaryCTA onClick={ctx.back}>Back to home</SecondaryCTA>,
+  cta: (
+    <div className="mx-auto w-full max-w-[320px]">
+      <button
+        type="button"
+        onClick={() => ctx.resetHome()}
+        className="pressable flex w-full items-center justify-center gap-2 rounded-[18px] border-2 bg-white py-[15px] font-display text-[15px] font-bold outline-none"
+        style={{ borderColor: purple, color: purple }}
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden
+        >
+          <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z" />
+        </svg>
+        Back to home
+      </button>
+    </div>
+  ),
 })
 
 function HistoryBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
-  const live = useTxHistory(ctx.wallet?.pubkey ?? null, 20)
-  const liveEntries = live.entries.length > 0
-  const list = liveEntries ? live.entries : DEMO_HISTORY
+  const live = useTxHistory(ctx.wallet?.pubkey ?? null, 25)
+  const liveEntries: HistoryEntry[] = live.entries.map((e) => ({
+    id: e.id,
+    direction: e.direction,
+    counterparty: e.counterparty,
+    amount: e.amount ?? 0,
+    status: "delivered",
+    when: e.when || "—",
+  }))
+  const entries: HistoryEntry[] = liveEntries.length > 0 ? liveEntries : mock.history
+  const isLive = liveEntries.length > 0
+
   return (
-    <div>
-      <div className="font-display font-black text-navy text-[28px] tracking-[-0.02em] leading-none mt-1">
+    <div className="mx-auto w-full max-w-[320px] pb-2">
+      <h1 className="font-display text-[26px] font-black leading-tight tracking-[-0.02em] text-[#1a1c3d]">
         History
-      </div>
-      <div className="text-[13px] font-semibold text-navy/55 mt-1.5">
-        Every Kumo you&apos;ve sent and received.
+      </h1>
+      <p className="mt-2 text-[14px] font-medium leading-snug text-[#64748b]">
+        Review your sent and received payments.
+      </p>
+
+      <div className="relative z-0 mx-auto mt-5 flex min-h-[min(220px,52vw)] w-full items-end justify-center px-1">
+        <Image
+          src="/state-05.png"
+          alt=""
+          width={640}
+          height={640}
+          priority
+          draggable={false}
+          sizes="(max-width: 420px) 92vw, 320px"
+          className="relative z-0 h-[min(280px,72vw)] w-auto max-w-[min(340px,94vw)] select-none object-contain object-bottom drop-shadow-[0_12px_32px_rgba(15,23,42,0.08)]"
+        />
       </div>
 
-      <div className="mt-4 bg-white rounded-2xl softshadow-sm overflow-hidden">
-        {list.map((h, i) => (
-          <a
-            key={h.id}
-            href={
-              "signature" in h && h.signature
-                ? `https://solscan.io/tx/${h.signature}?cluster=devnet`
-                : undefined
-            }
-            target={"signature" in h ? "_blank" : undefined}
-            rel={"signature" in h ? "noreferrer" : undefined}
-            className={[
-              "flex items-center gap-3 px-4 py-3.5",
-              i < list.length - 1 ? "border-b border-dashed border-navy/8" : "",
-              "signature" in h ? "hover:bg-sky/20 transition-colors" : "",
-            ].join(" ")}
-          >
+      <div className="relative z-[1] -mt-16 overflow-hidden rounded-[18px] border border-[#eef2f6] bg-white pt-2 shadow-[0_12px_40px_-18px_rgba(15,23,42,0.12)]">
+        {entries.map((h, i) => {
+          const isOut = h.direction === "out"
+          const label = isOut ? `To ${h.counterparty}` : `From ${h.counterparty}`
+          const initial = initialForEntry(h)
+          const bgOut = "#ede9fe"
+          const fgOut = "#5b21b6"
+          const bgIn = "#dcfce7"
+          const fgIn = "#166534"
+          return (
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-[15px] text-navy"
-              style={{ background: h.direction === "out" ? "#C7B5FF" : "#7FE8FF" }}
+              key={h.id}
+              className={[
+                "flex items-center gap-3 px-4 py-3.5",
+                i < entries.length - 1 ? "border-b border-[#f1f5f9]" : "",
+              ].join(" ")}
             >
-              {h.direction === "out" ? "↑" : "↓"}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-extrabold text-navy text-[14px] truncate">
-                {h.direction === "out" ? `Sent ${h.counterparty}` : `From ${h.counterparty}`}
-              </div>
-              <div className="text-[11px] text-navy/55 font-semibold">{h.when || "—"}</div>
-            </div>
-            <div className="text-right">
-              <div className="font-extrabold text-navy text-[15px]">
-                {h.amount == null
-                  ? "—"
-                  : `${h.direction === "out" ? "−" : "+"}$${formatUsdc(h.amount)}`}
-              </div>
               <div
-                className="text-[10px] font-bold uppercase tracking-wide mt-0.5"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-display text-[16px] font-black"
                 style={{
-                  color: h.status === "queued" ? "#7B6CC9" : "#0B1020",
-                  opacity: h.status === "queued" ? 1 : 0.55,
+                  background: isOut ? bgOut : bgIn,
+                  color: isOut ? fgOut : fgIn,
                 }}
               >
-                {h.status}
+                {initial}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-extrabold lowercase text-[#1a1c3d]">
+                  {label}
+                </div>
+                <div className="text-[12px] font-semibold lowercase text-[#94a3b8]">
+                  {h.when}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="font-extrabold text-[15px] text-[#1a1c3d]">
+                  {isOut ? "−" : "+"}
+                  {formatAmount(h.amount)} USDC
+                </div>
+                <div
+                  className="mt-0.5 text-[12px] font-bold capitalize"
+                  style={{ color: statusColor(h.status) }}
+                >
+                  {statusLabel(h.status)}
+                </div>
               </div>
             </div>
-          </a>
-        ))}
+          )
+        })}
       </div>
 
-      {!liveEntries && (
-        <div className="text-[11px] text-navy/55 text-center mt-4 font-semibold">
+      {!isLive ? (
+        <p className="mt-2 text-center text-[11px] font-semibold text-navy/45">
           No on-chain activity yet — showing example entries.
-        </div>
-      )}
-      {live.error && (
-        <div className="text-[11px] text-navy/55 text-center mt-2 font-semibold">
-          Couldn&apos;t reach RPC: {live.error}
-        </div>
-      )}
+        </p>
+      ) : null}
     </div>
   )
 }

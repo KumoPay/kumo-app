@@ -1,6 +1,8 @@
 import type { ReactNode } from "react"
 import type { PaymentIntent } from "@kumo/shared"
 
+import type { SolanaClusterId } from "../cluster-preference"
+
 export type ScreenId =
   | "home"
   | "contacts"
@@ -42,6 +44,8 @@ export type NavCtx = {
   back: () => void
   /** Reset the stack back to home (used by Settled when payment finishes). */
   resetHome: () => void
+  /** Jump to a new payment intent (home → intent); use tiles or in-app CTAs, not the tab bar. */
+  goToNewPayment: () => void
   airplane: boolean
   setAirplane: (v: boolean) => void
   /** Currently connected wallet, or null on the connect screen. */
@@ -51,6 +55,9 @@ export type NavCtx = {
   disconnectWallet: () => void
   /** Finishes one-time onboarding: saves alias and continues to Home + splash. */
   completeAliasOnboarding: (localHandle: string) => void
+  /** Active Solana cluster for RPC / display (persisted locally). */
+  solanaCluster: SolanaClusterId
+  setSolanaCluster: (id: SolanaClusterId) => void
 
   // Payment flow state — shared across intent/sign/queued/settled
   intentText: string

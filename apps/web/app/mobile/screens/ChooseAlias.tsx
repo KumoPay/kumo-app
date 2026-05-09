@@ -22,7 +22,7 @@ function AliasForm({ ctx }: { ctx: NavCtx }) {
           Choose your alias
         </h1>
         <p className="mx-auto mt-2 max-w-[30ch] text-[14px] leading-snug text-navy/50">
-          This is how your contacts will see you. Lowercase letters, numbers, and underscores only.
+          This is how contacts will see you. Letters, numbers, and underscores—no spaces.
         </p>
       </div>
 
@@ -50,7 +50,7 @@ function AliasForm({ ctx }: { ctx: NavCtx }) {
           />
         </div>
         <p className="mt-3 truncate text-[13px] font-semibold text-navy/60">
-          <span className="text-navy/40">Others will see you as:</span>{" "}
+          <span className="text-navy/40">You&apos;ll appear as:</span>{" "}
           <span className="break-all font-display text-[15px] font-black text-navy">
             {preview}
           </span>
