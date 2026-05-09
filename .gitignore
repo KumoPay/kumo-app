@@ -26,6 +26,7 @@ skills-lock.json
 
 # Local/generated demo artifacts
 apps/desktop/tsconfig.tsbuildinfo
+apps/web/tsconfig.tsbuildinfo
 apps/mobile/.expo
 apps/mobile/android
 apps/mobile/tsconfig.tsbuildinfo

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Offline-first confidential cross-chain USDC payments. QVAC + MagicBlock PER + LI.FI + Solana durable nonces.",
   "scripts": {
-    "dev": "pnpm --filter desktop dev",
+    "dev": "pnpm --filter web dev",
     "mobile:start": "pnpm --filter mobile start",
     "mobile:android": "pnpm --filter mobile android",
     "mobile:typecheck": "pnpm --filter mobile typecheck",
@@ -25,5 +25,21 @@
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^18.3.28",
+      "@types/react-dom": "^18.3.0"
+    },
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "react-native"
+      ],
+      "allowedVersions": {
+        "react": "18",
+        "react-dom": "18",
+        "@types/react": "18"
+      }
+    }
   }
 }
