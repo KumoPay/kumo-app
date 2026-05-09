@@ -1,9 +1,10 @@
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import { useBalance } from "../hooks/use-balance"
+import { useMergedHistory } from "../hooks/use-merged-history"
 import { displayWalletAlias } from "./alias-utils"
 import { K, SHADOW } from "./theme"
 import { ASSETS } from "./assets"
-import { relativeTime, useHistory } from "./history-store"
+import { relativeTime } from "./history-store"
 import type { ScreenRenderer } from "./types"
 
 const formatUsdc = (n: number) =>
@@ -24,7 +25,7 @@ export const Home: ScreenRenderer = (ctx) => ({
 
 function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
   const balance = useBalance(ctx.wallet?.pubkey ?? null)
-  const history = useHistory()
+  const history = useMergedHistory(ctx.wallet?.pubkey ?? null, 8)
 
   const usdcDisplay = balance.usdc ?? 0
   const slice = history.entries.slice(0, 3)
@@ -59,10 +60,22 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: balance.error ? "#f59e0b" : K.green },
+                {
+                  backgroundColor: balance.cached
+                    ? "#f59e0b"
+                    : balance.error
+                      ? "#f59e0b"
+                      : K.green,
+                },
               ]}
             />
-            <Text style={styles.statusText}>{balance.error ? "Offline" : "Connected"}</Text>
+            <Text style={styles.statusText}>
+              {balance.cached
+                ? `Cached · ${relativeTime(balance.fetchedAt ?? Date.now())}`
+                : balance.error
+                  ? "Offline"
+                  : "Connected"}
+            </Text>
           </View>
         </View>
         <View style={styles.balanceMascot}>
@@ -89,8 +102,27 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
               const initial = (h.counterparty.charAt(0) || "?").toUpperCase()
               const out = h.direction === "out"
               const bg = out ? "#e8e0ff" : "#d4f5e6"
-              const title = out ? `To ${h.counterparty}` : `From ${h.counterparty}`
-              const amount = `${out ? "−" : "+"}${formatUsdc(h.amount)} USDC`
+              const title = h.external
+                ? "On-chain transaction"
+                : out
+                  ? `To ${h.counterparty}`
+                  : `From ${h.counterparty}`
+              const amount =
+                h.amount == null ? "—" : `${out ? "−" : "+"}${formatUsdc(h.amount)} USDC`
+              const statusColor =
+                h.status === "failed"
+                  ? "#dc2626"
+                  : h.status === "queued"
+                    ? "#ea580c"
+                    : out
+                      ? "#7c5cff"
+                      : "#1b9e5a"
+              const statusLabel =
+                h.status === "queued"
+                  ? "pending"
+                  : h.status === "failed"
+                    ? "failed"
+                    : "delivered"
               return (
                 <View
                   key={h.id}
@@ -101,12 +133,12 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.activityTitleRow} numberOfLines={1}>{title}</Text>
-                    <Text style={styles.activityWhen}>{relativeTime(h.createdAt)}</Text>
+                    <Text style={styles.activityWhen}>{relativeTime(h.ts)}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={styles.activityAmount}>{amount}</Text>
-                    <Text style={[styles.activityStatus, { color: out ? "#7c5cff" : "#1b9e5a" }]}>
-                      {h.status}
+                    <Text style={[styles.activityStatus, { color: statusColor }]}>
+                      {statusLabel}
                     </Text>
                   </View>
                 </View>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native"
+import { Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native"
 import { Eyebrow, SecondaryCTA } from "./atoms"
 import { ASSETS } from "./assets"
 import { K, SHADOW } from "./theme"
@@ -23,7 +23,27 @@ import {
   requireForSign,
   setRequireForSign,
 } from "../lib/biometric"
+import {
+  getApiBaseUrl,
+  getDefaultApiBaseUrl,
+  setApiBaseUrl,
+} from "../lib/runtime-config"
+import {
+  clearNonce,
+  getNonceSetup,
+  refreshNonceFromChain,
+  type NonceSetup,
+} from "../lib/durable-nonce"
+import { useConnection } from "../hooks/use-connection"
 import type { ScreenRenderer } from "./types"
+
+function relativeMinutes(ts: number): string {
+  const diff = Math.max(0, Date.now() - ts)
+  if (diff < 60_000) return "just now"
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
+}
 
 export const Settings: ScreenRenderer = (ctx) => ({
   body: <SettingsBody ctx={ctx} />,
@@ -37,6 +57,11 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
   const [bioRequire, setBioRequire] = useState(false)
   const [bioAvailable, setBioAvailable] = useState(false)
   const [bioLabel, setBioLabel] = useState("Device biometric")
+  const [apiUrl, setApiUrlState] = useState("")
+  const apiDefault = getDefaultApiBaseUrl()
+  const { connection } = useConnection()
+  const [nonce, setNonce] = useState<NonceSetup | null>(null)
+  const [nonceBusy, setNonceBusy] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -47,8 +72,35 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
       setBioRequire(await requireForSign())
       setBioAvailable(await isBiometricAvailable())
       setBioLabel(await getBiometricLabel())
+      setApiUrlState(await getApiBaseUrl())
+      setNonce(await getNonceSetup())
     })()
   }, [])
+
+  async function onRefreshNonce() {
+    if (!nonce?.noncePubkey) return
+    setNonceBusy(true)
+    try {
+      await refreshNonceFromChain({ connection, noncePubkey: nonce.noncePubkey })
+      setNonce(await getNonceSetup())
+    } finally {
+      setNonceBusy(false)
+    }
+  }
+
+  async function onClearNonce() {
+    await clearNonce()
+    setNonce(null)
+  }
+
+  async function onSaveApiUrl() {
+    await setApiBaseUrl(apiUrl)
+  }
+
+  async function onResetApiUrl() {
+    await setApiBaseUrl("")
+    setApiUrlState(apiDefault)
+  }
 
   async function onToggleBio(v: boolean) {
     setBioRequire(v)
@@ -98,7 +150,7 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
       </View>
 
       <View style={{ marginTop: 14 }}>
-        <Eyebrow>Demo</Eyebrow>
+        <Eyebrow>Connection</Eyebrow>
         <View style={[styles.card, SHADOW.pill, styles.row]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardKey}>Airplane mode</Text>
@@ -221,6 +273,94 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
       </View>
 
       <View style={{ marginTop: 14 }}>
+        <Eyebrow>Offline payments</Eyebrow>
+        <View style={[styles.card, SHADOW.pill]}>
+          {nonce?.cached ? (
+            <>
+              <Text style={styles.cardKey}>Ready</Text>
+              <Text style={styles.cardSub}>
+                Nonce {nonce.noncePubkey.slice(0, 6)}…{nonce.noncePubkey.slice(-4)} ·
+                refreshed {relativeMinutes(nonce.cached.refreshedAt)}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                <Pressable
+                  onPress={() => void onRefreshNonce()}
+                  disabled={nonceBusy}
+                  style={({ pressed }) => [
+                    styles.miniBtn,
+                    nonceBusy && { opacity: 0.6 },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={styles.miniBtnText}>
+                    {nonceBusy ? "Refreshing…" : "Refresh nonce"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void onClearNonce()}
+                  style={({ pressed }) => [styles.miniBtnGhost, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.miniBtnGhostText}>Disable</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.cardKey}>Not set up</Text>
+              <Text style={styles.cardSub}>
+                Set up a durable nonce account so you can sign payments without network and broadcast them later.
+              </Text>
+              <Pressable
+                onPress={() => ctx.push("enableOfflinePay")}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { marginTop: 12 },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.miniBtnText}>Set up</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </View>
+
+      <View style={{ marginTop: 14 }}>
+        <Eyebrow>Server</Eyebrow>
+        <View style={[styles.card, SHADOW.pill]}>
+          <Text style={styles.cardKey}>Backend URL</Text>
+          <Text style={styles.cardSub}>
+            Where the app reaches /api/parse-intent and /api/build-private-transfer.
+          </Text>
+          <TextInput
+            value={apiUrl}
+            onChangeText={setApiUrlState}
+            onBlur={() => void onSaveApiUrl()}
+            placeholder={apiDefault}
+            placeholderTextColor={K.navy30}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.urlInput}
+          />
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+            <Pressable
+              onPress={() => void onSaveApiUrl()}
+              style={({ pressed }) => [styles.miniBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.miniBtnText}>Save</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void onResetApiUrl()}
+              style={({ pressed }) => [styles.miniBtnGhost, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.miniBtnGhostText}>Reset to default</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      <View style={{ marginTop: 14 }}>
         <Eyebrow>Quick links</Eyebrow>
         <Pressable
           onPress={() => ctx.push("contacts")}
@@ -271,4 +411,23 @@ const styles = StyleSheet.create({
     backgroundColor: K.cyan,
   },
   miniBtnText: { color: K.navy, fontSize: 12, fontWeight: "900" },
+  miniBtnGhost: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: K.navy20,
+  },
+  miniBtnGhostText: { color: K.navy, fontSize: 12, fontWeight: "800" },
+  urlInput: {
+    marginTop: 10,
+    backgroundColor: K.cream,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: K.navy,
+    borderWidth: 1.5,
+    borderColor: K.navy10,
+  },
 })

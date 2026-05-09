@@ -12,13 +12,6 @@ export type Contact = {
 }
 
 const KEY = "kumo.mobile.contacts.v1"
-const SEEDED_KEY = "kumo.mobile.contacts.seeded"
-
-const SEED: Contact[] = [
-  { id: "alice", name: "Alice Reyes", handle: "@alice",     pubkey: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ", bg: "#7FE8FF", initial: "A", createdAt: 0 },
-  { id: "bob",   name: "Bob Kim",     handle: "@bob.kumo",  pubkey: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",   bg: "#C7B5FF", initial: "B", createdAt: 0 },
-  { id: "carol", name: "Carol Chen",  handle: "@carol",     pubkey: "9dVFGHp5AEkan51Q6PVDxRn4tQByrwUdwkmtwkUsCi43", bg: "#B7F1FF", initial: "C", createdAt: 0 },
-]
 
 const PALETTE = ["#7FE8FF", "#C7B5FF", "#B7F1FF", "#FFD8B7", "#C7F1B7", "#FFB7C7"]
 
@@ -49,20 +42,7 @@ async function writeAll(list: Contact[]): Promise<void> {
   await AsyncStorage.setItem(KEY, JSON.stringify(list)).catch(() => {})
 }
 
-async function ensureSeeded(): Promise<void> {
-  const seeded = await AsyncStorage.getItem(SEEDED_KEY).catch(() => null)
-  if (seeded === "1") return
-  const existing = await readAll()
-  if (existing.length > 0) {
-    await AsyncStorage.setItem(SEEDED_KEY, "1").catch(() => {})
-    return
-  }
-  await writeAll(SEED.map((c) => ({ ...c, createdAt: Date.now() })))
-  await AsyncStorage.setItem(SEEDED_KEY, "1").catch(() => {})
-}
-
 export async function listContacts(): Promise<Contact[]> {
-  await ensureSeeded()
   return (await readAll()).sort((a, b) => b.createdAt - a.createdAt)
 }
 
