@@ -76,7 +76,7 @@ export async function deleteContact(id: string): Promise<void> {
 export async function resolveRecipientToPubkey(query: string): Promise<string | null> {
   const q = query.trim().toLowerCase().replace(/^@/, "")
   if (!q) return null
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query.trim())) return query.trim()
+  if (/^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(query.trim())) return query.trim()
   const all = await listContacts()
   const hit = all.find(
     (c) =>

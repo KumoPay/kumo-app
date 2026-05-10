@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native"
 import Svg, { Circle, Path, Rect } from "react-native-svg"
 
 import { ASSETS } from "./assets"
+import { useNetwork } from "../hooks/use-network"
 import { K } from "./theme"
 import type { ScreenRenderer } from "./types"
 
@@ -149,7 +150,27 @@ export const Sign: ScreenRenderer = (ctx) => {
   const isPrivate = Boolean(intent?.private)
 
   return {
-    body: (
+    body: <SignBody ctx={ctx} recipient={recipient} amount={amount} memo={memo} isPrivate={isPrivate} />,
+    cta: <SignCta ctx={ctx} hasIntent={Boolean(intent)} />,
+  }
+}
+
+function SignBody({
+  ctx,
+  recipient,
+  amount,
+  memo,
+  isPrivate,
+}: {
+  ctx: Parameters<ScreenRenderer>[0]
+  recipient: string
+  amount: string
+  memo: string
+  isPrivate: boolean
+}) {
+  const network = useNetwork()
+  const online = network.online
+  return (
       <View>
         <View style={styles.heroWrap}>
           <View style={styles.heroArcs}>
@@ -164,7 +185,9 @@ export const Sign: ScreenRenderer = (ctx) => {
 
         <Text style={styles.h1}>Review intent</Text>
         <Text style={styles.sub}>
-          Confirm the payment details before signing offline.
+          {online
+            ? "Confirm the payment details before paying."
+            : "Confirm the payment details before signing offline."}
         </Text>
 
         <View style={styles.detailCard}>
@@ -196,7 +219,9 @@ export const Sign: ScreenRenderer = (ctx) => {
           <View style={{ flex: 1 }}>
             <Text style={styles.infoTitle}>Sign with your wallet</Text>
             <Text style={styles.infoText}>
-              Your wallet signs locally. No network required.
+              {online
+                ? "Your wallet signs and the payment is broadcast right after."
+                : "Your wallet signs locally. No network required."}
             </Text>
           </View>
         </View>
@@ -208,31 +233,52 @@ export const Sign: ScreenRenderer = (ctx) => {
           </View>
         ) : null}
       </View>
-    ),
-    cta: (
-      <View style={{ gap: 10 }}>
-        <Pressable
-          onPress={ctx.back}
-          style={({ pressed }) => [styles.backCta, pressed && { opacity: 0.85 }]}
-        >
-          <Text style={styles.backCtaText}>Back</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => void ctx.signOffline()}
-          disabled={ctx.busy || !intent}
-          style={({ pressed }) => [
-            styles.primaryCta,
-            (ctx.busy || !intent) && { opacity: 0.6 },
-            pressed && !(ctx.busy || !intent) && { opacity: 0.92 },
-          ]}
-        >
-          <Text style={styles.primaryCtaText}>
-            {ctx.busy ? "Awaiting signature…" : "Sign offline"}
-          </Text>
-        </Pressable>
-      </View>
-    ),
+  )
+}
+
+function SignCta({
+  ctx,
+  hasIntent,
+}: {
+  ctx: Parameters<ScreenRenderer>[0]
+  hasIntent: boolean
+}) {
+  const network = useNetwork()
+  const disabled = ctx.busy || !hasIntent
+  const online = network.online
+
+  function onPrimary() {
+    if (online) void ctx.broadcast()
+    else void ctx.signOffline()
   }
+
+  const label = ctx.busy
+    ? "Awaiting signature…"
+    : online
+      ? "Sign & pay"
+      : "Sign offline"
+
+  return (
+    <View style={{ gap: 10 }}>
+      <Pressable
+        onPress={ctx.back}
+        style={({ pressed }) => [styles.backCta, pressed && { opacity: 0.85 }]}
+      >
+        <Text style={styles.backCtaText}>Back</Text>
+      </Pressable>
+      <Pressable
+        onPress={onPrimary}
+        disabled={disabled}
+        style={({ pressed }) => [
+          styles.primaryCta,
+          disabled && { opacity: 0.6 },
+          pressed && !disabled && { opacity: 0.92 },
+        ]}
+      >
+        <Text style={styles.primaryCtaText}>{label}</Text>
+      </Pressable>
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({

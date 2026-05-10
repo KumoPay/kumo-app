@@ -51,7 +51,7 @@ export function parseIntentRegex(input: string): PaymentIntent | null {
   // If recipient looks like multiple words after cleanup, treat the longest token as the name.
   // (e.g. "alice the cat" → "alice"). For pubkey-like (base58 32+ char) tokens, prefer that.
   const tokens = recipient.split(" ")
-  const pubkeyLike = tokens.find((t) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t))
+  const pubkeyLike = tokens.find((t) => /^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(t))
   const dotSol = tokens.find((t) => /\.sol$/i.test(t))
   const finalRecipient = pubkeyLike ?? dotSol ?? tokens[0] ?? recipient
 

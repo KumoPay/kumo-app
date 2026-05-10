@@ -16,6 +16,7 @@ import {
 } from "expo-audio"
 import { PrimaryCTA } from "./atoms"
 import { K, SHADOW } from "./theme"
+import { useContacts, type Contact } from "./contacts-store"
 import { useNetwork } from "../hooks/use-network"
 import {
   isWhisperDownloaded,
@@ -40,10 +41,22 @@ export const Intent: ScreenRenderer = (ctx) => ({
 function IntentBody({ ctx }: { ctx: NavCtx }) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
   const network = useNetwork()
+  const { contacts } = useContacts()
+  const [picking, setPicking] = useState(false)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [whisperReady, setWhisperReady] = useState(false)
   const startedAtRef = useRef<number>(0)
+
+  function pickContact(c: Contact) {
+    const token = c.handle.replace(/^@/, "") || c.name.toLowerCase().replace(/\s+/g, "")
+    const existing = ctx.intentText.trim()
+    const next = existing
+      ? `${existing.replace(/\s+$/, "")} ${token} `
+      : `pay ${token} `
+    ctx.setIntentText(next)
+    setPicking(false)
+  }
 
   useEffect(() => {
     void (async () => {
@@ -115,16 +128,17 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
         />
         <View style={styles.cardFooter}>
           <Pressable
-            onPress={() =>
-              Alert.alert("Contacts", "Coming soon — choose recipients from your address book.")
-            }
+            onPress={() => setPicking((v) => !v)}
             style={({ pressed }) => [
               styles.contactBtn,
+              picking && { backgroundColor: "rgba(199,181,255,0.55)" },
               pressed && { opacity: 0.85 },
             ]}
           >
             <IconUserSmall />
-            <Text style={styles.contactBtnText}>Choose contact</Text>
+            <Text style={styles.contactBtnText}>
+              {picking ? "Close picker" : "Choose contact"}
+            </Text>
           </Pressable>
           <Pressable
             onPress={onMicPress}
@@ -145,6 +159,65 @@ function IntentBody({ ctx }: { ctx: NavCtx }) {
           </Pressable>
         </View>
       </View>
+
+      {picking && (
+        <View style={[styles.pickerCard, styles.inputCardShadow]}>
+          {contacts.length === 0 ? (
+            <View>
+              <Text style={styles.pickerEmpty}>
+                No contacts yet. Add one to pay them by name.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setPicking(false)
+                  ctx.push("contacts")
+                }}
+                style={({ pressed }) => [
+                  styles.pickerManageBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.pickerManageText}>+ Add a contact</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              {contacts.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => pickContact(c)}
+                  style={({ pressed }) => [
+                    styles.pickerRow,
+                    pressed && { backgroundColor: "rgba(124,92,255,0.08)" },
+                  ]}
+                >
+                  <View style={[styles.pickerAvatar, { backgroundColor: c.bg }]}>
+                    <Text style={styles.pickerAvatarText}>{c.initial}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.pickerName} numberOfLines={1}>{c.name}</Text>
+                    <Text style={styles.pickerHandle} numberOfLines={1}>
+                      {c.handle} · {c.pubkey.slice(0, 4)}…{c.pubkey.slice(-4)}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={() => {
+                  setPicking(false)
+                  ctx.push("contacts")
+                }}
+                style={({ pressed }) => [
+                  styles.pickerManageBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.pickerManageText}>Manage contacts</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
 
       <View style={styles.chipsRow}>
         <ChipToggle
@@ -399,6 +472,52 @@ const styles = StyleSheet.create({
     color: K.purple,
     textTransform: "uppercase",
     textAlign: "center",
+  },
+  pickerCard: {
+    marginTop: 12,
+    backgroundColor: K.white,
+    borderRadius: 18,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(196,181,253,0.6)",
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  pickerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerAvatarText: { fontSize: 14, fontWeight: "900", color: K.slate900 },
+  pickerName: { fontSize: 14, fontWeight: "900", color: K.slate800 },
+  pickerHandle: { fontSize: 11, color: "#64748b", fontWeight: "700", marginTop: 2 },
+  pickerEmpty: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    fontSize: 12,
+    color: K.navy55,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  pickerManageBtn: {
+    marginTop: 4,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  pickerManageText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: K.purple,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   chip: {
