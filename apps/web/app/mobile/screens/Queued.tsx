@@ -174,7 +174,7 @@ export const Queued: ScreenRenderer = (ctx) => {
               </svg>
             </div>
             <Image
-              src="/state-03.png"
+              src="/state-02.png"
               alt=""
               width={248}
               height={248}

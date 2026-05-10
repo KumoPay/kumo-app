@@ -89,7 +89,7 @@ function SettingsBody({ ctx }: { ctx: NavCtx }) {
               ✦
             </span>
             <Image
-              src="/state-06.png"
+              src="/state-07.png"
               alt=""
               width={220}
               height={220}

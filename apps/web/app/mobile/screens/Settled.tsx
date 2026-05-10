@@ -196,7 +196,7 @@ export const Settled: ScreenRenderer = (ctx) => {
                 </svg>
               </div>
               <Image
-                src="/state-05.png"
+                src="/state-07.png"
                 alt=""
                 width={240}
                 height={240}

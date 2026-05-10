@@ -1,8 +1,8 @@
 "use client"
 
+import LandingNav from "@/components/landing-nav"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
-import LandingNav from "@/components/landing-nav"
 import { KumoMascot, KumoMark } from "@/components/kumo-mascot"
 import type { PaymentIntent } from "@kumo/shared"
 
@@ -17,9 +17,8 @@ const FLOW_SCREENS: Array<{ id: ScreenId; step: string; label: string }> = [
 ]
 
 const DEMO_RECIPIENT_MAP: Record<string, string> = {
-  alice: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
-  bob: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
-  carol: "9dVFGHp5AEkan51Q6PVDxRn4tQByrwUdwkmtwkUsCi43",
+  maria: "AMBTMn1TiX3jWcGh9BUnasBq1jix3ShJyu2QTGkSZZxQ",
+  javier: "Znf1az6ZwwszgKHBTxvGQRcZaULmUMXSCkgRQhtrdQy",
 }
 
 type Settlement = { signature: string; sessionId: string }
@@ -156,23 +155,24 @@ export default function FlowPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cream relative overflow-hidden">
+    <div
+      className="landing-page landing-page-motion relative min-h-screen overflow-x-hidden selection:bg-[#ede9fe] selection:text-[#1e1b4b]"
+      style={{
+        fontFamily: "'DM Sans', 'Nunito', 'Segoe UI', sans-serif",
+        background: "linear-gradient(180deg, #ffffff 0%, #fafbff 52%, #f5f3ff 100%)",
+      }}
+    >
       <LandingNav anchorsRelativeToHome={false} />
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-12 -left-10 w-72 h-72 rounded-full bg-sky opacity-50 blur-3xl" />
-        <div className="absolute top-40 -right-20 w-96 h-96 rounded-full bg-lilac opacity-30 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 rounded-full bg-cyan opacity-30 blur-3xl" />
-      </div>
 
-      <main className="relative max-w-[1180px] mx-auto px-8 pt-[100px] pb-16 grid lg:grid-cols-[1fr_auto_1fr] gap-10 items-start">
+      <main className="relative mx-auto grid max-w-[1100px] items-start gap-10 px-5 pb-20 pt-[max(5.75rem,calc(5rem+env(safe-area-inset-top,0px)))] md:gap-12 md:px-8 lg:grid-cols-[minmax(0,340px)_1fr] lg:gap-14 lg:pb-24">
         {/* Left: step list */}
-        <aside className="lg:sticky lg:top-24">
-          <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-navy/50 mb-3">The Kumo flow</div>
-          <h1 className="font-display font-black text-navy text-[36px] leading-tight tracking-[-0.02em] mb-2">
-            Walk with Kumo<br />through the offline payment.
+        <aside className="lg:sticky lg:top-28">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Interactive flow</div>
+          <h1 className="mb-2 text-[clamp(28px,3.8vw,40px)] font-black tracking-tight leading-tight text-[#1a1a2e]">
+            Walk with Kumo through the offline payment.
           </h1>
-          <p className="text-navy/60 text-[14px] mb-8 leading-relaxed">
-            Five connected screens. Tap a step or use the arrows below the phone to walk forward.
+          <p className="mb-8 max-w-[28rem] text-[15px] leading-relaxed text-[#64748b]">
+            Five connected screens. Tap a step or use the arrows under the phone to move forward — same product story as on the homepage.
           </p>
 
           <ol className="space-y-2">
@@ -184,23 +184,31 @@ export default function FlowPage() {
                   <button
                     onClick={() => setIdx(i)}
                     className={[
-                      "w-full text-left flex items-center gap-3 rounded-2xl px-4 py-3 transition pressable",
-                      active ? "bg-cyan softshadow" : done ? "bg-sky/40" : "bg-white softshadow-sm hover:bg-sky/30",
+                      "flex w-full items-center gap-3 rounded-[18px] border px-4 py-3 text-left outline-none ring-offset-2 transition-[box-shadow,border-color,background-color,transform] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-[#6d28d9] active:scale-[0.99]",
+                      active
+                        ? "border-transparent bg-[#ede9fe] shadow-[0_10px_32px_rgba(109,40,217,0.16)] ring-2 ring-[#c7b8ff]/50"
+                        : done
+                          ? "border-[#ebe9fc] bg-violet-50/65 hover:bg-violet-100/55"
+                          : "border-[#eef0ff] bg-white shadow-[0_6px_24px_rgba(109,40,217,0.07)] hover:border-[#dcd6fe]",
                     ].join(" ")}
                   >
                     <span
                       className={[
-                        "w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-extrabold",
-                        active ? "bg-navy text-cloud" : done ? "bg-cloud text-navy" : "bg-cream text-navy/60",
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold",
+                        active
+                          ? "bg-[#6d28d9] text-white shadow-sm"
+                          : done
+                            ? "bg-[#e0e7ff] text-[#5b21b6]"
+                            : "bg-[#f4f4f5] text-slate-500",
                       ].join(" ")}
                     >
                       {i + 1}
                     </span>
-                    <div className="flex-1">
-                      <div className="font-display font-extrabold text-navy text-[15px] leading-tight">{s.label}</div>
-                      <div className="text-navy/55 text-[11px] font-bold uppercase tracking-[0.16em]">{s.step}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-bold leading-tight text-[#1a1a2e]">{s.label}</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{s.step}</div>
                     </div>
-                    {active && <span className="text-navy text-[14px]">●</span>}
+                    {active ? <span className="text-[#6d28d9]" aria-hidden="true">●</span> : null}
                   </button>
                 </li>
               )
@@ -208,55 +216,51 @@ export default function FlowPage() {
           </ol>
 
           {errorMsg && (
-            <div className="mt-6 p-4 rounded-2xl bg-white border border-lilac/60 text-[12px] text-navy/80 leading-relaxed">
-              <div className="font-bold uppercase tracking-[0.18em] text-[10px] mb-1 text-lilac">// error</div>
+            <div className="mt-6 rounded-2xl border border-red-100 bg-red-50/85 p-4 text-[13px] leading-relaxed text-red-900">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-red-700">Error</div>
               {errorMsg}
             </div>
           )}
         </aside>
 
         {/* Center: phone frame */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center lg:justify-self-center">
           <div className="relative">
             <PhoneShell>
               <Body {...screenProps} />
             </PhoneShell>
-
-            <CloudGlyph2 className="absolute -left-12 top-12 opacity-70" size={48} />
-            <CloudGlyph2 className="absolute -right-10 top-32 opacity-60" size={36} />
-            <CloudGlyph2 className="absolute -left-14 bottom-24 opacity-50" size={42} />
           </div>
 
           {/* Walker */}
-          <div className="mt-7 flex items-center gap-3">
+          <div className="mt-8 flex items-center gap-3">
             <button
               onClick={() => setIdx((i) => Math.max(0, i - 1))}
               disabled={idx === 0}
-              className="pressable w-12 h-12 rounded-full bg-white softshadow flex items-center justify-center disabled:opacity-40"
+              type="button"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-[#eef0f8] bg-white shadow-[0_6px_20px_rgba(109,40,217,0.10)] outline-none ring-offset-2 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:border-[#dcd6fe] focus-visible:ring-2 focus-visible:ring-[#6d28d9] disabled:opacity-35 active:scale-[0.98]"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#0B1020" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1a1a2e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4 L5 9 L11 14" />
               </svg>
             </button>
-            <div className="bg-white softshadow rounded-full px-4 py-2 text-[12px] font-bold text-navy min-w-[120px] text-center">
-              {idx + 1} / {FLOW_SCREENS.length} · {FLOW_SCREENS[idx].label}
+            <div className="min-w-[132px] rounded-full border border-[#eef0ff] bg-white px-4 py-2 text-center text-[12px] font-bold shadow-[0_4px_16px_rgba(109,40,217,0.08)]">
+              <span className="text-[#6d28d9]">{idx + 1}</span>
+              <span className="text-slate-400"> / </span>
+              <span>{FLOW_SCREENS.length}</span>
+              <span className="block truncate text-[11px] font-semibold text-slate-600">{FLOW_SCREENS[idx].label}</span>
             </div>
             <button
               onClick={() => setIdx((i) => Math.min(FLOW_SCREENS.length - 1, i + 1))}
               disabled={idx === FLOW_SCREENS.length - 1}
-              className="pressable w-12 h-12 rounded-full bg-cyan softshadow flex items-center justify-center disabled:opacity-40"
+              type="button"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-[#6d28d9] shadow-[0_8px_22px_rgba(109,40,217,0.28)] outline-none ring-offset-2 transition-[background-color,transform,opacity] duration-200 ease-out hover:bg-[#5b21b6] focus-visible:ring-2 focus-visible:ring-[#6d28d9] disabled:opacity-35 active:scale-[0.98]"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#0B1020" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7 4 L13 9 L7 14" />
               </svg>
             </button>
           </div>
         </div>
-
-        {/* Right: notes */}
-        <aside className="lg:sticky lg:top-24">
-          <FlowNotes screen={screen.id} />
-        </aside>
       </main>
     </div>
   )
@@ -521,7 +525,7 @@ function ScreenConnect({ onNext }: ScreenProps) {
 }
 
 function ScreenIntent({ airplane, setAirplane, busy, onParse }: ScreenProps) {
-  const [text, setText] = useState("pay alice 1 usdc privately")
+  const [text, setText] = useState("pay maria 50 usdc privately")
   return (
     <>
       <PhoneStatusBar airplane={airplane} />
@@ -561,7 +565,7 @@ function ScreenIntent({ airplane, setAirplane, busy, onParse }: ScreenProps) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
-          placeholder="pay alice 1 usdc privately"
+          placeholder="pay maria 50 usdc privately"
           style={{
             width: "100%",
             marginTop: 8,
@@ -1022,93 +1026,5 @@ function CloudTinyGlyph({ color = "#C7B5FF" }: { color?: string }) {
         fill={color}
       />
     </svg>
-  )
-}
-
-function CloudGlyph2({ className = "", size = 40 }: { className?: string; size?: number }) {
-  return (
-    <svg className={className} width={size} height={size * 0.7} viewBox="0 0 60 42" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M10 30 c0 -10 9 -16 18 -14 c2 -8 13 -10 18 -3 c8 -1 12 7 8 12 c5 3 2 11 -3 11 l-36 0 c-7 0 -8 -3 -5 -6 z"
-        fill="#fff"
-        stroke="#0B1020"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function FlowNotes({ screen }: { screen: ScreenId }) {
-  const notes: Record<ScreenId, { title: string; mascot: string; bullets: string[] }> = {
-    connect: {
-      title: "Welcoming hero",
-      mascot: "cheerful — antenna sparkling",
-      bullets: [
-        "Three Mobile Wallet Adapter cards in soft sky-blue.",
-        "Saga Seed Vault footnote in lilac.",
-        "Subtle 3s breathing animation on the hero.",
-      ],
-    },
-    intent: {
-      title: "Speak intent",
-      mascot: "curious — eyes wide, listening",
-      bullets: [
-        "On-device QVAC parser, no cloud round-trips.",
-        "Toggle Airplane to feel the offline promise.",
-        "Soft-cyan focus ring, no hard borders.",
-      ],
-    },
-    sign: {
-      title: "Sign with Face ID",
-      mascot: "concentrating — eyes closed",
-      bullets: [
-        "Parsed intent shown as friendly key/value, not raw JSON.",
-        "Durable-nonce signing. No RPC required.",
-        "Hold the Face ID prompt to seal the tx.",
-      ],
-    },
-    queued: {
-      title: "Resting offline",
-      mascot: "sleeping — sleep marks rising",
-      bullets: [
-        "Cached tx waits in IndexedDB until reconnect.",
-        "Status pill turns lilac for airplane mode.",
-        "Reassuring copy: 'Nothing is leaving.'",
-      ],
-    },
-    settled: {
-      title: "Delivered ✨",
-      mascot: "celebrating — arms up, sparkles",
-      bullets: [
-        "Receipt as a friendly card with Solscan link.",
-        "Public chain shows only a heartbeat.",
-        "CTA loops back so you can send another.",
-      ],
-    },
-  }
-  const note = notes[screen]
-  return (
-    <div className="card rounded-3xl p-6 softshadow">
-      <div className="text-[11px] font-bold tracking-[0.16em] uppercase text-navy/50">Design notes</div>
-      <h3 className="font-display font-black text-navy text-[24px] tracking-[-0.02em] mt-1 leading-tight">
-        {note.title}
-      </h3>
-      <div className="mt-3 inline-flex items-center gap-2 bg-sky/50 px-3 py-1.5 rounded-full text-[12px] font-bold text-navy">
-        <span>🐾</span>
-        {note.mascot}
-      </div>
-      <ul className="mt-5 space-y-3">
-        {note.bullets.map((b, i) => (
-          <li key={i} className="flex gap-3 text-[13px] text-navy/75 leading-snug">
-            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-cyan shrink-0" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-6 border-t border-sky/60 pt-4 text-[12px] text-navy/55 leading-relaxed">
-        <span className="font-bold text-navy">Voice:</span> companion energy. Kumo waits with you.
-      </div>
-    </div>
   )
 }

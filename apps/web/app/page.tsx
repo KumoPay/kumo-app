@@ -317,7 +317,7 @@ export default function LandingPage() {
 
         {/* Mascot + wave — negative margin tuned for hero without demo cards */}
         <div className="-mt-[3.35rem] md:-mt-[4.5rem] lg:-mt-[6.35rem]" style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingBottom: 0, width: "100%", position: "relative", zIndex: 1 }}>
-          <div style={{ display: "flex", justifyContent: "center", position: "relative", zIndex: 3, transform: "translate(clamp(2rem, 21vw, 12.75rem), -76px)", marginBottom: "clamp(-9.35rem, -23vw, -5.95rem)" }}>
+          <div style={{ display: "flex", justifyContent: "center", position: "relative", zIndex: 3, transform: "translate(clamp(2rem, 21vw, 12.75rem), calc(min(404px, 92vw) * -0.19))", marginBottom: "calc(min(404px, 92vw) * -0.37)" }}>
             <div
               ref={kumoRevealRef}
               className={`group/kumo landing-kumo-from-fold ${!kumoRevealed ? "landing-kumo-fold-pending" : ""}${kumoRevealed && kumoPlayEntryAnimation ? " landing-kumo-from-fold--in" : ""}`}
@@ -342,7 +342,7 @@ export default function LandingPage() {
               />
             </div>
           </div>
-          <div aria-hidden style={{ width: "100%", lineHeight: 0, position: "relative", zIndex: 1, marginTop: "clamp(-4.65rem, -11.75vw, -1.45rem)", marginBottom: "clamp(-2rem, -4.5vw, -0.75rem)" }}>
+          <div aria-hidden style={{ width: "100%", lineHeight: 0, position: "relative", zIndex: 1, marginTop: "calc(16px - 2.2vw)", marginBottom: "clamp(-2rem, -4.5vw, -0.75rem)" }}>
             <svg viewBox="0 0 1440 72" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", display: "block" }}>
               <path d="M0 32 Q720 54 1440 32 L1440 72 L0 72 Z" fill="#f8f8ff" />
             </svg>

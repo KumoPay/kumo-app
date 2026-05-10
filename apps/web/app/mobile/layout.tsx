@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { KumoWalletProvider } from "@/app/app/providers"
+import { KumoWalletProvider } from "@/lib/wallet-provider"
 
 export const metadata: Metadata = {
   title: "Kumo — Mobile",
