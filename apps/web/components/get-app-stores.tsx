@@ -101,7 +101,7 @@ export function GetTheAppButton(props: {
               Want to download for Android?
             </h2>
             <p id={dialogDescId} className="mt-2 text-[14px] leading-relaxed text-slate-500">
-              You&apos;re about to open Google Play to get KumoPay. This link opens in a new tab.
+              You&apos;re about to download the KumoPay APK from the Solana dApp Store. This link opens in a new tab.
             </p>
           </div>
 
@@ -121,7 +121,7 @@ export function GetTheAppButton(props: {
               onClick={() => dialogRef.current?.close()}
               className="inline-flex w-full items-center justify-center rounded-[14px] bg-[#6d28d9] px-4 py-[14px] text-[15px] font-bold text-white no-underline shadow-[0_6px_20px_rgba(109,40,217,0.28)] outline-none ring-offset-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#5b21b6] hover:shadow-[0_12px_28px_rgba(109,40,217,0.34)] focus-visible:ring-2 focus-visible:ring-[#6d28d9] active:scale-[0.99] sm:w-auto"
             >
-              Continue to Google Play
+              Continue to dApp Store
             </a>
           </div>
         </div>
