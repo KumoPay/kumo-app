@@ -14,7 +14,7 @@
 
 use anchor_lang::prelude::*;
 
-declare_id!("KuMoIntntRcpt1111111111111111111111111111111");
+declare_id!("8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6");
 
 #[program]
 pub mod intent_receipt {

@@ -52,7 +52,7 @@ export const INTENT_RECEIPT_IDL = {
 // Program ID — replace after `solana-keygen new -o target/deploy/intent_receipt-keypair.json`
 // and `anchor keys sync`. Placeholder for the prototype.
 export const INTENT_RECEIPT_PROGRAM_ID = new PublicKey(
-  "KuMoIntntRcpt1111111111111111111111111111111",
+  "8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6",
 )
 
 export function deriveIntentPda(user: PublicKey, intentHash: Uint8Array): [PublicKey, number] {

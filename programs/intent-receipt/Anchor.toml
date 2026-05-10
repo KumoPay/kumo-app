@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-intent_receipt = "KuMoIntntRcpt1111111111111111111111111111111"
+intent_receipt = "8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6"
 
 [programs.localnet]
-intent_receipt = "KuMoIntntRcpt1111111111111111111111111111111"
+intent_receipt = "8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6"
 
 [registry]
 url = "https://api.apr.dev"
