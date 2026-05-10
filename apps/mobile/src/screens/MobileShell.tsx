@@ -56,7 +56,7 @@ import { resolveRecipientToPubkey } from "./contacts-store"
 import { appendHistory, updateHistoryStatus } from "./history-store"
 import { enqueueIntent, listQueue, removeFromQueue } from "./queue-store"
 import { awaitConfirmation } from "../lib/transactions"
-import { getNonceSetup } from "../lib/durable-nonce"
+import { getNonceSetup, refreshNonceFromChain } from "../lib/durable-nonce"
 import {
   buildPublicTransferFresh,
   buildPublicTransferWithNonce,
@@ -69,6 +69,8 @@ import { useConnection } from "../hooks/use-connection"
 import { useNetwork } from "../hooks/use-network"
 import { useWalletAdapter } from "../hooks/use-wallet-adapter"
 import { MAGICBLOCK_TEE_RPC } from "../lib/config"
+import { registerBroadcastTask } from "../lib/background-broadcast"
+import { notifyPaymentFailed, notifyPaymentSent } from "../lib/notify"
 
 const SCREENS: Record<ScreenId, ScreenRenderer> = {
   home: Home,
@@ -157,6 +159,7 @@ export function MobileShell() {
       }
       setBootstrapped(true)
     })()
+    void registerBroadcastTask()
   }, [])
 
   // After real MWA connect succeeds, sync wallet info + persist + advance.
@@ -193,13 +196,23 @@ export function MobileShell() {
           setIntentHash(latest.intentHash)
           setOfflineSig(latest.offlineSig)
           setStack(["home", "queued"])
-        } else {
-          setStack(["home"])
-          setShowAppSplash(true)
+          return
         }
+        // First-time setup: if we're online and the user has no durable nonce
+        // account yet, route to EnableOfflinePay so they're ready to sign while
+        // offline later. They can still skip.
+        if (network.online) {
+          const setup = await getNonceSetup()
+          if (!setup?.cached) {
+            setStack(["home", "enableOfflinePay"])
+            return
+          }
+        }
+        setStack(["home"])
+        setShowAppSplash(true)
       })()
     }
-  }, [connected, publicKey, label, stack])
+  }, [connected, publicKey, label, stack, network.online])
 
   const current = stack[stack.length - 1]
   const canGoBack = stack.length > 1
@@ -340,6 +353,19 @@ export function MobileShell() {
       setError("Wallet does not support signMessage.")
       return
     }
+    // Durable nonce is single-use until advanced on-chain. Allow only one
+    // offline-signed payment in the queue at a time so the cached nonce can't
+    // be reused for two txs that would race for the same slot.
+    const existingQueue = await listQueue()
+    const myPending = existingQueue.filter(
+      (q) => q.signerPubkey === publicKey.toBase58() && q.signedTxBase64,
+    )
+    if (myPending.length > 0) {
+      setError(
+        "You already have a pending offline payment. Broadcast or clear it before signing another.",
+      )
+      return
+    }
     setError(null)
     setBusy(true)
     try {
@@ -452,7 +478,32 @@ export function MobileShell() {
           preSigned.sendTo === "ephemeral"
             ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
             : connection
-        const signature = await conn.sendRawTransaction(preSigned.tx)
+        let signature: string
+        try {
+          signature = await conn.sendRawTransaction(preSigned.tx)
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : String(e)
+          // Pre-signed tx points at a nonce that's already been advanced. The
+          // signed bytes can't be revived — drop the queue entry, refresh the
+          // cached nonce, and ask the user to sign a fresh one.
+          if (/Blockhash not found|nonce/i.test(reason) && intentHash) {
+            const pending = await listQueue()
+            for (const q of pending) {
+              if (q.intentHash === intentHash) await removeFromQueue(q.id)
+            }
+            const setup = await getNonceSetup()
+            if (setup?.noncePubkey) {
+              await refreshNonceFromChain({
+                connection,
+                noncePubkey: setup.noncePubkey,
+              }).catch(() => {})
+            }
+            throw new Error(
+              "This offline payment expired (durable nonce was already used). Sign a fresh one.",
+            )
+          }
+          throw e
+        }
         setSettlement({ signature, sendTo: preSigned.sendTo })
         const entry = await appendHistory({
           direction: "out",
@@ -461,6 +512,11 @@ export function MobileShell() {
           signature,
           status: "queued",
           sendTo: preSigned.sendTo,
+        })
+        void notifyPaymentSent({
+          amountUsdc: parsedIntent.amount_usdc,
+          recipient: parsedIntent.recipient,
+          signature,
         })
         void awaitConfirmation({ signature, sendTo: preSigned.sendTo }).then((res) => {
           if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
@@ -564,6 +620,11 @@ export function MobileShell() {
         sendTo: j.send_to,
         validator: j.validator,
       })
+      void notifyPaymentSent({
+        amountUsdc: parsedIntent.amount_usdc,
+        recipient: parsedIntent.recipient,
+        signature,
+      })
       // Fire-and-forget confirmation poll. Updates status when chain confirms.
       void awaitConfirmation({ signature, sendTo: j.send_to }).then((res) => {
         if (res.ok) {
@@ -631,6 +692,15 @@ export function MobileShell() {
     wasOnlineRef.current = network.online
     if (wasOnline || !network.online || !publicKey) return
     void (async () => {
+      // Keep the cached nonce fresh so the next offline-sign uses a value the
+      // chain still recognizes when we eventually broadcast.
+      const setup = await getNonceSetup()
+      if (setup?.noncePubkey) {
+        await refreshNonceFromChain({
+          connection,
+          noncePubkey: setup.noncePubkey,
+        }).catch(() => {})
+      }
       const queue = await listQueue()
       const mine = queue.filter(
         (q) => q.signedTxBase64 && q.signerPubkey === publicKey.toBase58(),
@@ -652,6 +722,11 @@ export function MobileShell() {
             sendTo: q.sendTo ?? "base",
           })
           await removeFromQueue(q.id)
+          void notifyPaymentSent({
+            amountUsdc: q.intent.amount_usdc,
+            recipient: q.intent.recipient,
+            signature,
+          })
           void awaitConfirmation({ signature, sendTo: q.sendTo ?? "base" }).then((res) => {
             if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
             else
@@ -662,7 +737,17 @@ export function MobileShell() {
           })
         } catch (e) {
           console.warn("auto-broadcast failed for", q.id, e)
-          // Leave in queue so the user can retry manually from the Queued screen.
+          const reason = e instanceof Error ? e.message : String(e)
+          // Stale durable nonce means the pre-signed tx is permanently invalid.
+          // Drop it from the queue so the user can re-sign cleanly.
+          if (/Blockhash not found|nonce/i.test(reason)) {
+            await removeFromQueue(q.id)
+          }
+          void notifyPaymentFailed({
+            amountUsdc: q.intent.amount_usdc,
+            recipient: q.intent.recipient,
+            reason,
+          })
         }
       }
     })()

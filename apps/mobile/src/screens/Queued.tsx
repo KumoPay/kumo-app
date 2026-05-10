@@ -153,7 +153,7 @@ export const Queued: ScreenRenderer = (ctx) => {
             <SignalArcsLeft />
           </View>
           <Image
-            source={ASSETS.state03}
+            source={ASSETS.state02}
             style={styles.heroImg}
             resizeMode="contain"
           />
