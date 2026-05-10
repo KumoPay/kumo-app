@@ -235,7 +235,7 @@ sequenceDiagram
   Parser-->>Mobile: recipient, amount, privacy, memo
   Mobile->>Mobile: Canonicalize and hash intent
   Mobile->>Wallet: signMessage("Kumo offline intent: <hash>")
-  Note over Mobile,Wallet: Intent approval is non-custodial; the private key stays in the wallet.
+  Note over Mobile,Wallet: Intent approval is non-custodial and the private key stays in the wallet
   Wallet-->>Mobile: ed25519 signature
 
   alt Offline public transfer
@@ -273,7 +273,7 @@ sequenceDiagram
     Mobile->>MB: GET /spl/challenge?pubkey=<wallet>
     MB-->>Mobile: challenge string
     Mobile->>Wallet: signMessage(challenge)
-    Note over Mobile,Wallet: Wallet signs the challenge bytes; Kumo never receives the private key.
+    Note over Mobile,Wallet: Wallet signs the challenge bytes and Kumo never receives the private key
     Wallet-->>Mobile: raw ed25519 signature
     Mobile->>MB: POST /spl/login { pubkey, challenge, signature }
     MB-->>Mobile: bearer token
