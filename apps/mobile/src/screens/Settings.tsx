@@ -161,7 +161,7 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
           <Switch
             value={ctx.airplane}
             onValueChange={ctx.setAirplane}
-            trackColor={{ false: K.navy10, true: K.lilac }}
+            trackColor={{ false: K.navy10, true: K.purple }}
           />
         </View>
       </View>
@@ -194,14 +194,14 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             <Text style={styles.cardSub}>
               {aiDownloaded
                 ? "Downloaded · intent parsing runs on this device"
-                : `Not downloaded · falls back to cloud QVAC server`}
+                : "Not downloaded · falls back to a built-in regex parser (no network)"}
             </Text>
           </View>
           {aiDownloaded ? (
             <Switch
               value={aiEnabled}
               onValueChange={onToggleAi}
-              trackColor={{ false: K.navy10, true: K.cyan }}
+              trackColor={{ false: K.navy10, true: K.purple }}
             />
           ) : (
             <Pressable
@@ -234,7 +234,7 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             value={bioRequire}
             onValueChange={onToggleBio}
             disabled={!bioAvailable}
-            trackColor={{ false: K.navy10, true: K.cyan }}
+            trackColor={{ false: K.navy10, true: K.purple }}
           />
         </View>
       </View>
@@ -254,7 +254,7 @@ function SettingsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
             <Switch
               value={voiceEnabled}
               onValueChange={onToggleVoice}
-              trackColor={{ false: K.navy10, true: K.lilac }}
+              trackColor={{ false: K.navy10, true: K.purple }}
             />
           ) : (
             <Pressable
@@ -408,9 +408,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: K.cyan,
+    backgroundColor: K.purple,
   },
-  miniBtnText: { color: K.navy, fontSize: 12, fontWeight: "900" },
+  miniBtnText: { color: K.white, fontSize: 12, fontWeight: "900" },
   miniBtnGhost: {
     paddingHorizontal: 12,
     paddingVertical: 8,

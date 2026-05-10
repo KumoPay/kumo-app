@@ -141,7 +141,7 @@ function EnableLocalAIBody({
       </View>
 
       <Text style={styles.fineprint}>
-        Skipping is fine — Kumo will use the cloud QVAC server until you enable on-device AI in Settings.
+        Skipping is fine — Kumo falls back to a built-in regex parser (still on-device, no network) until you enable the LLM in Settings.
       </Text>
     </View>
   )
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: K.cyan,
+    backgroundColor: K.purple,
   },
   progressMeta: {
     marginTop: 8,

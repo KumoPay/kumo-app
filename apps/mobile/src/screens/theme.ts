@@ -27,6 +27,21 @@ export const K = {
   lilac28: "rgba(199,181,255,0.28)",
   lilac45: "rgba(199,181,255,0.45)",
 
+  // Brand purple — used for primary CTAs throughout the new mobile design.
+  purple: "#7c5cff",
+  purpleStrong: "#7B61FF",
+  purpleSoft: "rgba(124,92,255,0.5)",
+  // Slate palette used in card titles, body text, dividers — matches the web /mobile design.
+  slate900: "#0f172a",
+  slate800: "#131b34",
+  slate700: "#1a1c3d",
+  slate500: "#64748b",
+  slate400: "#94a3b8",
+  slate300: "#cbd5e1",
+  slate200: "#e2e8f0",
+  slate100: "#f1f5f9",
+  slate50: "#f9fafb",
+
   cream: "#FFF8E7",
   white: "#FFFFFF",
   pageBg: "#f9fafb",
@@ -46,7 +61,7 @@ export const SHADOW = {
     elevation: 3,
   },
   cta: {
-    shadowColor: K.cyan,
+    shadowColor: K.purple,
     shadowOpacity: 0.45,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },

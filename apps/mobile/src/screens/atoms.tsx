@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { isValidElement, type ReactNode } from "react"
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native"
 import Svg, { Path } from "react-native-svg"
 import { K, SHADOW } from "./theme"
@@ -28,11 +28,11 @@ export function PrimaryCTA({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={K.navy} />
-      ) : typeof children === "string" ? (
-        <Text style={atomStyles.primaryText}>{children}</Text>
-      ) : (
+        <ActivityIndicator color={K.white} />
+      ) : isValidElement(children) ? (
         children
+      ) : (
+        <Text style={atomStyles.primaryText}>{children}</Text>
       )}
     </Pressable>
   )
@@ -50,10 +50,10 @@ export function SecondaryCTA({
       onPress={onPress}
       style={({ pressed }) => [atomStyles.secondary, pressed && atomStyles.pressed]}
     >
-      {typeof children === "string" ? (
-        <Text style={atomStyles.secondaryText}>{children}</Text>
-      ) : (
+      {isValidElement(children) ? (
         children
+      ) : (
+        <Text style={atomStyles.secondaryText}>{children}</Text>
       )}
     </Pressable>
   )
@@ -118,33 +118,33 @@ const atomStyles = StyleSheet.create({
   primary: {
     width: "100%",
     paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 999,
+    paddingVertical: 17,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: K.cyan,
+    backgroundColor: K.purple,
     minHeight: 52,
   },
   primaryText: {
-    color: K.navy,
-    fontSize: 15,
+    color: K.white,
+    fontSize: 16,
     fontWeight: "800",
   },
   secondary: {
     width: "100%",
     paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 999,
+    paddingVertical: 15,
+    borderRadius: 18,
     backgroundColor: K.white,
-    borderWidth: 1.5,
-    borderColor: K.navy,
+    borderWidth: 2,
+    borderColor: K.purpleStrong,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 50,
   },
   secondaryText: {
-    color: K.navy,
-    fontSize: 15,
+    color: K.purpleStrong,
+    fontSize: 16,
     fontWeight: "800",
   },
   pressed: {

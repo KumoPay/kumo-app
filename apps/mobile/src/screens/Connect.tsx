@@ -9,7 +9,6 @@ const WALLETS = [
   { name: "Phantom", id: "phantom", logo: ASSETS.walletPhantom },
   { name: "Solflare", id: "solflare", logo: ASSETS.walletSolflare },
   { name: "Backpack", id: "backpack", logo: ASSETS.walletBackpack },
-  { name: "Glow", id: "glow", logo: ASSETS.walletGlow },
 ] as const
 
 function SignalArcs() {
@@ -74,9 +73,22 @@ export const Connect: ScreenRenderer = (ctx) => ({
       {ctx.error ? <Text style={styles.error}>{ctx.error}</Text> : null}
 
       <Text style={styles.devnetNote}>Devnet only. No real funds will move.</Text>
-      <Pressable onPress={() => void Linking.openURL("https://faucet.circle.com/")}>
-        <Text style={styles.faucetLink}>Need devnet USDC? faucet.circle.com</Text>
-      </Pressable>
+      <Text style={styles.faucetLink}>
+        Need devnet funds?{" "}
+        <Text
+          style={styles.faucetLinkAccent}
+          onPress={() => void Linking.openURL("https://faucet.solana.com/")}
+        >
+          SOL
+        </Text>
+        {"  ·  "}
+        <Text
+          style={styles.faucetLinkAccent}
+          onPress={() => void Linking.openURL("https://faucet.circle.com/")}
+        >
+          USDC
+        </Text>
+      </Text>
     </View>
   ),
 })
@@ -220,10 +232,13 @@ const styles = StyleSheet.create({
   faucetLink: {
     marginTop: 6,
     paddingHorizontal: 12,
-    color: "#6d28d9",
+    color: "#64748b",
     fontSize: 13,
     fontWeight: "700",
     textAlign: "center",
+  },
+  faucetLinkAccent: {
+    color: "#6d28d9",
     textDecorationLine: "underline",
   },
 })
