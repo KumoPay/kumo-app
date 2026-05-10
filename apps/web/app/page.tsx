@@ -555,7 +555,7 @@ export default function LandingPage() {
                   { label: "About", href: "#about" },
                 ],
               },
-              { title: "Legal", links: [{ label: "Terms", href: "#" }, { label: "Privacy policy", href: "#" }] },
+              { title: "Legal", links: [{ label: "Terms", href: "/terms" }, { label: "Privacy policy", href: "/privacy" }] },
             ] as const).map((col) => (
               <div key={col.title}>
                 <p style={{ fontWeight: 700, color: "#1a1a2e", marginBottom: 14 }}>{col.title}</p>
