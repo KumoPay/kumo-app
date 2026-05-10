@@ -71,13 +71,22 @@ export async function signIntentMessage(opts: {
   wallet: ConnectedWallet
   intentHash: string
 }): Promise<string> {
+  const payload = new TextEncoder().encode(`Kumo offline intent: ${opts.intentHash}`)
+  return signArbitraryMessage({ wallet: opts.wallet, payload })
+}
+
+/** Generic signMessage path. Some MWA implementations prepend metadata to the
+ *  signed bytes; we always trim back to the trailing 64-byte ed25519 sig. */
+export async function signArbitraryMessage(opts: {
+  wallet: ConnectedWallet
+  payload: Uint8Array
+}): Promise<string> {
   try {
     return await transact(async (mobileWallet) => {
       await authorize(mobileWallet, opts.wallet.authToken)
-      const payload = new TextEncoder().encode(`Kumo offline intent: ${opts.intentHash}`)
       const signed = await mobileWallet.signMessages({
         addresses: [opts.wallet.rawAddress],
-        payloads: [payload],
+        payloads: [opts.payload],
       })
       const bytes = signed[0]
       if (!bytes) throw new Error("Wallet returned no signature.")

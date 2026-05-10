@@ -2,6 +2,7 @@ import { useCallback, useState } from "react"
 import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js"
 import {
   connectWallet,
+  signArbitraryMessage,
   signIntentMessage,
   signTransactionWithWallet,
   type ConnectedWallet,
@@ -24,6 +25,9 @@ export type MobileWalletAdapter = {
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   signMessage: ((message: Uint8Array) => Promise<Uint8Array>) | undefined
+  /** Generic sign — accepts arbitrary payload bytes. Returns the raw 64-byte
+   *  signature (so callers can bs58-encode for MagicBlock auth, etc.). */
+  signMessageRaw: ((payload: Uint8Array) => Promise<Uint8Array>) | undefined
   signTransaction:
     | (<T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>)
     | undefined
@@ -58,6 +62,16 @@ export function useWalletAdapter(): MobileWalletAdapter {
     [wallet],
   )
 
+  const signMessageRaw = useCallback(
+    async (payload: Uint8Array): Promise<Uint8Array> => {
+      if (!wallet) throw new Error("Wallet not connected")
+      const sigBs58 = await signArbitraryMessage({ wallet, payload })
+      const { default: bs58 } = await import("bs58")
+      return bs58.decode(sigBs58)
+    },
+    [wallet],
+  )
+
   const signTransaction = useCallback(
     async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
       if (!wallet) throw new Error("Wallet not connected")
@@ -74,6 +88,7 @@ export function useWalletAdapter(): MobileWalletAdapter {
     connect,
     disconnect,
     signMessage: wallet ? signMessage : undefined,
+    signMessageRaw: wallet ? signMessageRaw : undefined,
     signTransaction: wallet ? signTransaction : undefined,
   }
 }

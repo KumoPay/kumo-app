@@ -57,7 +57,11 @@ import { appendHistory, updateHistoryStatus } from "./history-store"
 import { enqueueIntent, listQueue, removeFromQueue } from "./queue-store"
 import { awaitConfirmation } from "../lib/transactions"
 import { getNonceSetup } from "../lib/durable-nonce"
-import { buildPublicTransferWithNonce } from "../lib/offline-build"
+import {
+  buildPublicTransferFresh,
+  buildPublicTransferWithNonce,
+} from "../lib/offline-build"
+import { privateTransferDirect } from "../lib/magicblock-direct"
 import { isLocalAIEnabled, isModelDownloaded, parseIntentLocal } from "../lib/qvac-local"
 import { parseIntentRegex } from "../lib/regex-parser"
 import { authenticateForAction, requireForSign } from "../lib/biometric"
@@ -65,7 +69,6 @@ import { useConnection } from "../hooks/use-connection"
 import { useNetwork } from "../hooks/use-network"
 import { useWalletAdapter } from "../hooks/use-wallet-adapter"
 import { MAGICBLOCK_TEE_RPC } from "../lib/config"
-import { getApiBaseUrl } from "../lib/runtime-config"
 
 const SCREENS: Record<ScreenId, ScreenRenderer> = {
   home: Home,
@@ -134,7 +137,16 @@ export function MobileShell() {
 
   const { connection } = useConnection()
   const adapter = useWalletAdapter()
-  const { publicKey, connected, label, connect, disconnect, signMessage, signTransaction } = adapter
+  const {
+    publicKey,
+    connected,
+    label,
+    connect,
+    disconnect,
+    signMessage,
+    signMessageRaw,
+    signTransaction,
+  } = adapter
 
   // Bootstrap: read persisted wallet (alias only — fresh MWA auth happens on connect tap).
   useEffect(() => {
@@ -287,23 +299,9 @@ export function MobileShell() {
         }
       }
 
-      // Tier 2: cloud QVAC server.
-      if (!intent) {
-        try {
-          const r = await fetch(`${await getApiBaseUrl()}/api/parse-intent`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          })
-          const j = await r.json()
-          if (j.ok) intent = j.intent as PaymentIntent
-          else console.warn("cloud parse failed, falling through:", j.error)
-        } catch (e) {
-          console.warn("cloud parse network error, falling through:", e)
-        }
-      }
-
-      // Tier 3: regex parser — last-resort, deterministic, no internet/model needed.
+      // Tier 2: regex parser — deterministic, fully on-device, no model needed.
+      // (The legacy /api/parse-intent cloud fallback is intentionally skipped —
+      //  Kumo runs without a backend.)
       if (!intent) {
         intent = parseIntentRegex(text)
       }
@@ -500,17 +498,47 @@ export function MobileShell() {
           `No contact "${parsedIntent.recipient}" found. Add them in Contacts first or paste a Solana address.`,
         )
       }
-      const r = await fetch(`${await getApiBaseUrl()}/api/build-private-transfer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intent: parsedIntent,
-          recipientPubkey,
-          userPubkey: publicKey.toBase58(),
-        }),
-      })
-      const j = await r.json()
-      if (!j.ok) throw new Error(j.error)
+
+      // Build directly on-device. Public = local SPL builder (no network); Private = MagicBlock REST.
+      type Built = {
+        transaction_b64: string
+        version: "legacy" | "v0"
+        send_to: "base" | "ephemeral"
+        validator?: string
+      }
+      let j: Built
+      if (parsedIntent.private) {
+        if (!signMessageRaw) {
+          throw new Error("Wallet does not support signMessage.")
+        }
+        const built = await privateTransferDirect({
+          fromPubkey: publicKey.toBase58(),
+          toPubkey: recipientPubkey,
+          amountUsdc: parsedIntent.amount_usdc,
+          memo: parsedIntent.memo,
+          signMessageRaw,
+        })
+        j = {
+          transaction_b64: built.transactionBase64,
+          version: built.version,
+          send_to: built.sendTo,
+          validator: built.validator,
+        }
+      } else {
+        const built = await buildPublicTransferFresh({
+          connection,
+          fromPubkey: publicKey.toBase58(),
+          toPubkey: recipientPubkey,
+          amountUsdc: parsedIntent.amount_usdc,
+          memo: parsedIntent.memo,
+        })
+        j = {
+          transaction_b64: built.transactionBase64,
+          version: built.version,
+          send_to: built.sendTo,
+        }
+      }
+
       const txBytes = Buffer.from(j.transaction_b64, "base64")
       let signed: Transaction | VersionedTransaction
       if (j.version === "v0") {
@@ -565,7 +593,16 @@ export function MobileShell() {
     } finally {
       setBusy(false)
     }
-  }, [parsedIntent, publicKey, signTransaction, connection, network.online, setAirplane, intentHash])
+  }, [
+    parsedIntent,
+    publicKey,
+    signTransaction,
+    signMessageRaw,
+    connection,
+    network.online,
+    setAirplane,
+    intentHash,
+  ])
 
   const ctx: NavCtx = useMemo(
     () => ({
@@ -738,7 +775,7 @@ export function MobileShell() {
                 key={id}
                 style={[
                   styles.stepDot,
-                  active ? { backgroundColor: K.navy } : done ? { backgroundColor: K.cyan } : { backgroundColor: K.sky50 },
+                  active ? { backgroundColor: "#a78bfa" } : done ? { backgroundColor: "#7dd3fc" } : { backgroundColor: K.slate200 },
                 ]}
               />
             )
