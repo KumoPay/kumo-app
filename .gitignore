@@ -20,6 +20,7 @@ coverage
 # Internal docs — mirrored in the private skills repo, not tracked here.
 docs/*.md
 .agents/
+.claude/
 DOCUMENTATION.md
 SKILL.md
 skills-lock.json
@@ -30,6 +31,7 @@ apps/web/tsconfig.tsbuildinfo
 apps/mobile/.expo
 apps/mobile/android
 apps/mobile/tsconfig.tsbuildinfo
+kumo-mobile.apk
 demo-keypair.json
 
 # Design source exports
