@@ -13,6 +13,13 @@ config.resolver.nodeModulesPaths = [
 ]
 // pnpm creates transient *_tmp_<pid> dirs under node_modules/.pnpm during installs.
 // Metro's fallback watcher races on them and crashes with ENOENT — block them out.
-config.resolver.blockList = [/node_modules\/[^/]+_tmp_[^/]+\//]
+// Same race happens with native build temp dirs (.cxx) that gradle creates and
+// deletes during release bundling.
+config.resolver.blockList = [
+  /node_modules\/[^/]+_tmp_[^/]+\//,
+  /\/\.cxx\//,
+  /\/android\/app\/build\//,
+  /\/android\/build\//,
+]
 
 module.exports = config

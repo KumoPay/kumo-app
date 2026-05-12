@@ -22,6 +22,10 @@ export type MobileWalletAdapter = {
   publicKey: PublicKey | null
   connected: boolean
   label: string
+  walletUriBase: string | null
+  /** MWA auth token — exposed only as a brand-detection hint (its JWT header
+   *  encodes the wallet identifier in the `typ` claim). NOT persisted. */
+  authToken: string | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   signMessage: ((message: Uint8Array) => Promise<Uint8Array>) | undefined
@@ -85,6 +89,8 @@ export function useWalletAdapter(): MobileWalletAdapter {
     publicKey: wallet?.publicKey ?? null,
     connected: wallet != null,
     label: wallet?.label ?? "",
+    walletUriBase: wallet?.walletUriBase ?? null,
+    authToken: wallet?.authToken ?? null,
     connect,
     disconnect,
     signMessage: wallet ? signMessage : undefined,

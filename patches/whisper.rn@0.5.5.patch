@@ -1,0 +1,212 @@
+diff --git a/android/src/main/java/com/rnwhisper/AudioUtils.java b/android/src/main/java/com/rnwhisper/AudioUtils.java
+index dab2d022b134dd08419bd6e170871c63db375443..8598c1cff90c0bccbd94d19c96b0ab34a0a27485 100644
+--- a/android/src/main/java/com/rnwhisper/AudioUtils.java
++++ b/android/src/main/java/com/rnwhisper/AudioUtils.java
+@@ -1,5 +1,9 @@
+ package com.rnwhisper;
+ 
++import android.media.MediaCodec;
++import android.media.MediaCodec.BufferInfo;
++import android.media.MediaExtractor;
++import android.media.MediaFormat;
+ import android.util.Log;
+ 
+ import java.io.ByteArrayOutputStream;
+@@ -51,4 +55,157 @@ public class AudioUtils {
+   public static float[] decodePcmData(String dataBase64) {
+     return bufferToFloatArray(Base64.getDecoder().decode(dataBase64), false);
+   }
++
++  /**
++   * Decode a compressed audio file (AAC/m4a/mp3/etc.) into Whisper's expected
++   * input shape: float32 mono PCM at 16 kHz. Uses MediaExtractor + MediaCodec
++   * for the codec-native decode, then downmixes channels and linearly resamples.
++   *
++   * Patched in for Kumo because the upstream `decodeWaveFile` reinterprets any
++   * file as raw PCM-16 — which produces noise (and Whisper hallucinated
++   * "*Gunshot*" / "*Sounds of car crash*" caption tokens) when given an AAC
++   * m4a recording from expo-audio / Android MediaRecorder.
++   */
++  public static float[] decodeAudioFile(String filePath) throws IOException {
++    MediaExtractor extractor = new MediaExtractor();
++    MediaCodec codec = null;
++    try {
++      extractor.setDataSource(filePath);
++      int audioTrack = -1;
++      MediaFormat format = null;
++      for (int i = 0; i < extractor.getTrackCount(); i++) {
++        MediaFormat f = extractor.getTrackFormat(i);
++        String mime = f.getString(MediaFormat.KEY_MIME);
++        if (mime != null && mime.startsWith("audio/")) {
++          audioTrack = i;
++          format = f;
++          break;
++        }
++      }
++      if (audioTrack < 0 || format == null) {
++        throw new IOException("No audio track found in " + filePath);
++      }
++      extractor.selectTrack(audioTrack);
++
++      String mime = format.getString(MediaFormat.KEY_MIME);
++      int srcSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
++      int channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
++
++      codec = MediaCodec.createDecoderByType(mime);
++      codec.configure(format, null, null, 0);
++      codec.start();
++
++      ByteArrayOutputStream pcm = new ByteArrayOutputStream();
++      BufferInfo info = new BufferInfo();
++      boolean inputEos = false;
++      boolean outputEos = false;
++      while (!outputEos) {
++        if (!inputEos) {
++          int inIdx = codec.dequeueInputBuffer(10_000);
++          if (inIdx >= 0) {
++            ByteBuffer inBuf = codec.getInputBuffer(inIdx);
++            if (inBuf == null) {
++              inputEos = true;
++              codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++            } else {
++              int sampleSize = extractor.readSampleData(inBuf, 0);
++              if (sampleSize < 0) {
++                inputEos = true;
++                codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++              } else {
++                long pts = extractor.getSampleTime();
++                codec.queueInputBuffer(inIdx, 0, sampleSize, pts, 0);
++                extractor.advance();
++              }
++            }
++          }
++        }
++
++        int outIdx = codec.dequeueOutputBuffer(info, 10_000);
++        if (outIdx >= 0) {
++          if (info.size > 0) {
++            ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
++            if (outBuf != null) {
++              byte[] chunk = new byte[info.size];
++              outBuf.position(info.offset);
++              outBuf.get(chunk, 0, info.size);
++              pcm.write(chunk);
++            }
++          }
++          codec.releaseOutputBuffer(outIdx, false);
++          if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
++            outputEos = true;
++          }
++        } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
++          MediaFormat newFmt = codec.getOutputFormat();
++          if (newFmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
++            srcSampleRate = newFmt.getInteger(MediaFormat.KEY_SAMPLE_RATE);
++          }
++          if (newFmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
++            channelCount = newFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
++          }
++        }
++      }
++
++      byte[] pcmBytes = pcm.toByteArray();
++      ShortBuffer sbuf = ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
++      short[] samples = new short[sbuf.limit()];
++      sbuf.get(samples);
++
++      short[] mono = channelCount > 1 ? downmixToMono(samples, channelCount) : samples;
++      return resampleAndNormalize(mono, srcSampleRate, 16_000);
++    } finally {
++      if (codec != null) {
++        try { codec.stop(); } catch (Exception ignored) {}
++        try { codec.release(); } catch (Exception ignored) {}
++      }
++      try { extractor.release(); } catch (Exception ignored) {}
++    }
++  }
++
++  private static short[] downmixToMono(short[] interleaved, int channels) {
++    int frames = interleaved.length / channels;
++    short[] mono = new short[frames];
++    for (int i = 0; i < frames; i++) {
++      int sum = 0;
++      for (int c = 0; c < channels; c++) {
++        sum += interleaved[i * channels + c];
++      }
++      mono[i] = (short) (sum / channels);
++    }
++    return mono;
++  }
++
++  /**
++   * Linear-interpolation resample + int16 → float32 normalize. Linear is a
++   * crude resampler that aliases above Nyquist, but whisper's mel front-end
++   * filters the result anyway and the model is robust to it; the alternative
++   * (sinc / polyphase) isn't worth the binary size for this use.
++   */
++  private static float[] resampleAndNormalize(short[] src, int srcRate, int dstRate) {
++    if (srcRate == dstRate) {
++      float[] out = new float[src.length];
++      for (int i = 0; i < src.length; i++) out[i] = clamp(src[i] / 32767.0f);
++      return out;
++    }
++    double ratio = (double) srcRate / (double) dstRate;
++    int dstLen = (int) (src.length / ratio);
++    float[] out = new float[dstLen];
++    for (int i = 0; i < dstLen; i++) {
++      double srcIdx = i * ratio;
++      int i0 = (int) srcIdx;
++      int i1 = i0 + 1;
++      if (i1 >= src.length) i1 = src.length - 1;
++      double frac = srcIdx - i0;
++      double sample = src[i0] * (1.0 - frac) + src[i1] * frac;
++      out[i] = clamp((float) (sample / 32767.0));
++    }
++    return out;
++  }
++
++  private static float clamp(float v) {
++    if (v > 1f) return 1f;
++    if (v < -1f) return -1f;
++    return v;
++  }
+ }
+diff --git a/android/src/main/java/com/rnwhisper/RNWhisper.java b/android/src/main/java/com/rnwhisper/RNWhisper.java
+index 045eee5a7d3a8ff9d4fd3e3acc0b7807772322c9..a7d341c68c5d078a9a3e1fca5d58ba80107130fb 100644
+--- a/android/src/main/java/com/rnwhisper/RNWhisper.java
++++ b/android/src/main/java/com/rnwhisper/RNWhisper.java
+@@ -130,6 +130,24 @@ public class RNWhisper implements LifecycleEventListener {
+     }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+   }
+ 
++  // Kumo patch: file extensions that need MediaExtractor decoding because
++  // the upstream `decodeWaveFile` only handles raw PCM-16 bytes. Matches the
++  // common MediaRecorder outputs on Android.
++  private static boolean isCompressedAudioPath(String path) {
++    if (path == null) return false;
++    String lower = path.toLowerCase();
++    int q = lower.indexOf('?');
++    if (q >= 0) lower = lower.substring(0, q);
++    return lower.endsWith(".m4a")
++        || lower.endsWith(".mp4")
++        || lower.endsWith(".aac")
++        || lower.endsWith(".mp3")
++        || lower.endsWith(".ogg")
++        || lower.endsWith(".opus")
++        || lower.endsWith(".webm")
++        || lower.endsWith(".3gp");
++  }
++
+   private int getResourceIdentifier(String filePath) {
+     int identifier = reactContext.getResources().getIdentifier(
+       filePath,
+@@ -262,6 +280,10 @@ public class RNWhisper implements LifecycleEventListener {
+         audioData = AudioUtils.decodeWaveFile(reactContext.getResources().openRawResource(resId));
+       } else if (filePathOrBase64.startsWith("data:audio/wav;base64,")) {
+         audioData = AudioUtils.decodeWaveData(filePathOrBase64);
++      } else if (isCompressedAudioPath(waveFilePath)) {
++        // Kumo patch: decodeWaveFile reinterprets bytes as PCM-16 and produces
++        // noise on AAC/m4a/mp3. Route compressed inputs through MediaExtractor.
++        audioData = AudioUtils.decodeAudioFile(waveFilePath);
+       } else {
+         audioData = AudioUtils.decodeWaveFile(new FileInputStream(new File(waveFilePath)));
+       }

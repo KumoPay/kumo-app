@@ -47,22 +47,33 @@ function HistoryBody({ ctx }: { ctx: NavCtx }) {
           entries.map((h, i) => {
             const out = h.direction === "out"
             const initial = (h.counterparty.charAt(0) || "?").toUpperCase()
-            const onTap = () =>
-              void Linking.openURL(`https://solscan.io/tx/${h.signature}?cluster=devnet`)
+            // Queued payments don't have a real on-chain signature yet — don't
+            // open Solscan; same for failed entries (link would 404 or show a
+            // useless error tx).
+            const canViewOnChain = h.status === "delivered"
+            const onTap = canViewOnChain
+              ? () =>
+                  void Linking.openURL(
+                    `https://solscan.io/tx/${h.signature}?cluster=devnet`,
+                  )
+              : undefined
             const amount =
               h.amount == null ? "—" : `${out ? "−" : "+"}${formatUsdc(h.amount)} USDC`
             const bgOut = "#ede9fe"
             const fgOut = "#5b21b6"
             const bgIn = "#dcfce7"
             const fgIn = "#166534"
+            const isPrivate = h.sendTo === "ephemeral"
+            const isPublic = h.sendTo === "base"
             return (
               <Pressable
                 key={h.id}
                 onPress={onTap}
+                disabled={!canViewOnChain}
                 style={({ pressed }) => [
                   styles.row,
                   i < entries.length - 1 && styles.divider,
-                  pressed && { opacity: 0.92 },
+                  pressed && canViewOnChain && { opacity: 0.92 },
                 ]}
               >
                 <View
@@ -76,14 +87,36 @@ function HistoryBody({ ctx }: { ctx: NavCtx }) {
                   </Text>
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.title} numberOfLines={1}>
-                    {h.external
-                      ? "On-chain transaction"
-                      : out
-                        ? `To ${h.counterparty}`
-                        : `From ${h.counterparty}`}
+                  <View style={styles.titleRow}>
+                    <Text style={styles.title} numberOfLines={1}>
+                      {h.external
+                        ? "On-chain transaction"
+                        : out
+                          ? `To ${h.counterparty}`
+                          : `From ${h.counterparty}`}
+                    </Text>
+                    {isPrivate && (
+                      <View style={[styles.modePill, styles.modePillPrivate]}>
+                        <Text style={styles.modePillText}>PRIVATE</Text>
+                      </View>
+                    )}
+                    {isPublic && (
+                      <View style={[styles.modePill, styles.modePillPublic]}>
+                        <Text style={styles.modePillTextPublic}>PUBLIC</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.when}>
+                    {relativeTime(h.ts)}
+                    {canViewOnChain && (
+                      <Text style={styles.solscanHint}>
+                        {" · "}
+                        {isPrivate
+                          ? "Solscan · nonceAdvance only ›"
+                          : "View on Solscan ›"}
+                      </Text>
+                    )}
                   </Text>
-                  <Text style={styles.when}>{relativeTime(h.ts)}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={styles.amount}>{amount}</Text>
@@ -169,8 +202,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { fontSize: 16, fontWeight: "900" },
-  title: { fontSize: 15, fontWeight: "900", color: "#1a1c3d" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { fontSize: 15, fontWeight: "900", color: "#1a1c3d", flexShrink: 1 },
+  modePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  modePillPrivate: {
+    backgroundColor: "#C7B5FF",
+  },
+  modePillPublic: {
+    backgroundColor: "#e2e8f0",
+  },
+  modePillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    color: "#0B1020",
+  },
+  modePillTextPublic: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    color: "#475569",
+  },
   when: { fontSize: 12, color: "#94a3b8", fontWeight: "700", marginTop: 2 },
+  solscanHint: { color: "#7c5cff", fontWeight: "800" },
   amount: {
     fontSize: 15,
     fontWeight: "900",

@@ -212,6 +212,14 @@ function SignBody({
           </View>
         </View>
 
+        <PrivacyReveal
+          isPrivate={isPrivate}
+          recipient={recipient}
+          amount={amount}
+          memo={memo}
+          intentHash={ctx.intentHash}
+        />
+
         <View style={styles.infoCard}>
           <View style={styles.infoIcon}>
             <ShieldIcon />
@@ -233,6 +241,83 @@ function SignBody({
           </View>
         ) : null}
       </View>
+  )
+}
+
+/**
+ * Two-column disclosure of which payment fields appear on the public Solana
+ * chain vs which stay inside MagicBlock's Private Ephemeral Rollup. Renders
+ * for both privacy modes so the user can compare them at the moment of
+ * signing.
+ */
+function PrivacyReveal({
+  isPrivate,
+  recipient,
+  amount,
+  memo,
+  intentHash,
+}: {
+  isPrivate: boolean
+  recipient: string
+  amount: string
+  memo: string
+  intentHash: string | null
+}) {
+  const shortHash = intentHash
+    ? `${intentHash.slice(0, 6)}…${intentHash.slice(-4)}`
+    : "—"
+  return (
+    <View style={styles.privacyRevealCard}>
+      <Text style={styles.privacyRevealTitle}>What's public vs private</Text>
+      <View style={styles.privacyRevealCols}>
+        <View style={styles.privacyRevealCol}>
+          <Text style={styles.privacyRevealColHeader}>Public on-chain</Text>
+          <PrivacyRow value="nonceAdvance instruction" />
+          <PrivacyRow value={`commitment ${shortHash}`} mono />
+          <PrivacyRow value="settlement receipt" />
+        </View>
+        <View style={styles.privacyRevealDivider} />
+        <View style={styles.privacyRevealCol}>
+          <Text style={styles.privacyRevealColHeader}>
+            {isPrivate ? "Stays in PER" : "Stays in PER"}
+          </Text>
+          {isPrivate ? (
+            <>
+              <PrivacyRow value={`recipient: ${recipient}`} mono />
+              <PrivacyRow value={`amount: ${amount}`} mono />
+              <PrivacyRow value={`memo: ${memo}`} mono dim={memo === "—"} />
+            </>
+          ) : (
+            <Text style={styles.privacyRevealNone}>
+              none — public SPL transfer, all details on-chain
+            </Text>
+          )}
+        </View>
+      </View>
+    </View>
+  )
+}
+
+function PrivacyRow({
+  value,
+  mono,
+  dim,
+}: {
+  value: string
+  mono?: boolean
+  dim?: boolean
+}) {
+  return (
+    <Text
+      style={[
+        styles.privacyRevealRow,
+        mono && styles.privacyRevealRowMono,
+        dim && styles.privacyRevealRowDim,
+      ]}
+      numberOfLines={1}
+    >
+      • {value}
+    </Text>
   )
 }
 
@@ -357,6 +442,59 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   privacyPillText: { color: "#0B1020", fontWeight: "900", fontSize: 11 },
+  privacyRevealCard: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    backgroundColor: "#0f172a",
+  },
+  privacyRevealTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: "#67e8f9",
+    marginBottom: 12,
+  },
+  privacyRevealCols: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  privacyRevealCol: {
+    flex: 1,
+    gap: 6,
+  },
+  privacyRevealDivider: {
+    width: 1,
+    backgroundColor: "#1e293b",
+  },
+  privacyRevealColHeader: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  privacyRevealRow: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#cbd5e1",
+    lineHeight: 16,
+  },
+  privacyRevealRowMono: {
+    fontFamily: "monospace",
+  },
+  privacyRevealRowDim: {
+    color: "#64748b",
+  },
+  privacyRevealNone: {
+    fontSize: 11,
+    fontStyle: "italic",
+    color: "#94a3b8",
+    lineHeight: 16,
+  },
   infoCard: {
     flexDirection: "row",
     gap: 12,

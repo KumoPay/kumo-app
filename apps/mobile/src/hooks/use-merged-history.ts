@@ -14,6 +14,10 @@ export type MergedHistoryEntry = {
   ts: number
   /** True for on-chain-only entries (sent from another app); these have null amount + synthetic counterparty. */
   external: boolean
+  /** Settlement target. "ephemeral" = MagicBlock PER (private); "base" = public
+   *  SPL transfer. Null for on-chain-only entries where we can't tell from the
+   *  signature alone. Drives the privacy-mode badge in History rows. */
+  sendTo: "base" | "ephemeral" | null
   failureReason?: string
 }
 
@@ -27,6 +31,7 @@ function fromLocal(e: LocalHistoryEntry): MergedHistoryEntry {
     status: e.status,
     ts: e.createdAt,
     external: false,
+    sendTo: e.sendTo ?? null,
     failureReason: e.failureReason,
   }
 }
@@ -41,6 +46,7 @@ function fromOnchain(o: OnchainEntry): MergedHistoryEntry {
     status: o.status,
     ts: (o.blockTime ?? Math.floor(Date.now() / 1000)) * 1000,
     external: true,
+    sendTo: null,
   }
 }
 

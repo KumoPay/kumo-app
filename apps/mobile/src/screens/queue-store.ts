@@ -21,6 +21,13 @@ export type QueuedIntent = {
   signedTxBase64?: string
   txVersion?: "legacy" | "v0"
   sendTo?: "base" | "ephemeral"
+  /** Nonce account this intent was signed against. Used to detect whether
+   *  the cached nonce is "committed" before signing a new offline intent. */
+  noncePubkey?: string
+  /** The durable-nonce blockhash baked into the signed tx. When the on-chain
+   *  nonce account no longer holds this value, the tx is permanently invalid
+   *  (the nonce has already been advanced by something else). */
+  nonceValue?: string
 }
 
 const KEY = "kumo.mobile.queue.v1"
@@ -72,6 +79,8 @@ export async function enqueueIntent(
     signedTxBase64: entry.signedTxBase64,
     txVersion: entry.txVersion,
     sendTo: entry.sendTo,
+    noncePubkey: entry.noncePubkey,
+    nonceValue: entry.nonceValue,
   }
   const all = await readAll()
   await writeAll([...all, next])

@@ -1,4 +1,6 @@
+import type { ReactNode } from "react"
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native"
+import Svg, { Path, Rect } from "react-native-svg"
 import { useBalance } from "../hooks/use-balance"
 import { useMergedHistory } from "../hooks/use-merged-history"
 import { displayWalletAlias } from "./alias-utils"
@@ -14,10 +16,11 @@ export const Home: ScreenRenderer = (ctx) => ({
   body: <HomeBody ctx={ctx} />,
   cta: (
     <Pressable
-      onPress={() => ctx.push("intent")}
+      onPress={() => ctx.push("chooseMode")}
       style={({ pressed }) => [styles.payBar, pressed && { opacity: 0.92 }]}
+      accessibilityLabel="New payment"
     >
-      <Text style={styles.payBarIcon}>✈</Text>
+      <PlaneIcon />
       <Text style={styles.payBarText}>New payment</Text>
     </Pressable>
   ),
@@ -37,7 +40,7 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
         <Text style={styles.greeting}>
           Hi, {(displayWalletAlias(ctx.wallet?.displayName) || "friend").toLowerCase()} 👋
         </Text>
-        <Text style={styles.greetSub}>Private payments—even offline.</Text>
+        <Text style={styles.greetSub}>Sign now. Settle when you reconnect.</Text>
         {balance.usdc != null && balance.sol != null && balance.sol < 0.01 ? (
           <Pressable
             onPress={() => void Linking.openURL("https://faucet.solana.com/")}
@@ -84,8 +87,27 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
       </View>
 
       <View style={styles.tilesRow}>
-        <Tile label="Pay" tint="#ede9fe" stroke="#6847e8" icon="↑" onPress={() => ctx.push("intent")} />
-        <Tile label="Receive" tint="#dbefff" stroke="#0b7dd4" icon="↓" onPress={() => ctx.push("receive")} />
+        <Tile
+          label="Pay"
+          tint="#ede9fe"
+          stroke="#6847e8"
+          icon={<TileText color="#6847e8">↑</TileText>}
+          onPress={() => ctx.push("chooseMode")}
+        />
+        <Tile
+          label="Receive"
+          tint="#dbefff"
+          stroke="#0b7dd4"
+          icon={<TileText color="#0b7dd4">↓</TileText>}
+          onPress={() => ctx.push("receive")}
+        />
+        <Tile
+          label="Scan"
+          tint="#dcfce7"
+          stroke="#15803d"
+          icon={<QRIcon color="#15803d" />}
+          onPress={() => ctx.push("scan")}
+        />
       </View>
 
       <View style={{ marginTop: 28 }}>
@@ -147,7 +169,7 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
           </View>
         ) : (
           <Pressable
-            onPress={() => ctx.push("intent")}
+            onPress={() => ctx.push("chooseMode")}
             style={({ pressed }) => [styles.activityCard, SHADOW.card, styles.empty, pressed && { opacity: 0.92 }]}
           >
             <Text style={styles.emptyTitle}>Make your first payment ✈</Text>
@@ -159,17 +181,24 @@ function HomeBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
   )
 }
 
+function PlaneIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill={K.white}>
+      <Path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2-.99 9z" />
+    </Svg>
+  )
+}
+
 function Tile({
   label,
   tint,
-  stroke,
   icon,
   onPress,
 }: {
   label: string
   tint: string
   stroke: string
-  icon: string
+  icon: ReactNode
   onPress: () => void
 }) {
   return (
@@ -177,11 +206,35 @@ function Tile({
       onPress={onPress}
       style={({ pressed }) => [styles.tile, SHADOW.card, pressed && { opacity: 0.92 }]}
     >
-      <View style={[styles.tileIcon, { backgroundColor: tint }]}>
-        <Text style={{ color: stroke, fontSize: 18, fontWeight: "900" }}>{icon}</Text>
-      </View>
+      <View style={[styles.tileIcon, { backgroundColor: tint }]}>{icon}</View>
       <Text style={styles.tileLabel}>{label}</Text>
     </Pressable>
+  )
+}
+
+function TileText({ color, children }: { color: string; children: ReactNode }) {
+  return <Text style={{ color, fontSize: 18, fontWeight: "900" }}>{children}</Text>
+}
+
+function QRIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      {/* TL finder */}
+      <Rect x={3} y={3} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={5.5} y={5.5} width={2} height={2} fill={color} />
+      {/* TR finder */}
+      <Rect x={14} y={3} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={16.5} y={5.5} width={2} height={2} fill={color} />
+      {/* BL finder */}
+      <Rect x={3} y={14} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={5.5} y={16.5} width={2} height={2} fill={color} />
+      {/* BR data cells */}
+      <Rect x={14} y={14} width={2.5} height={2.5} fill={color} />
+      <Rect x={18.5} y={14} width={2.5} height={2.5} fill={color} />
+      <Rect x={14} y={18.5} width={2.5} height={2.5} fill={color} />
+      <Rect x={18.5} y={18.5} width={2.5} height={2.5} fill={color} />
+      <Rect x={16.25} y={16.25} width={1.5} height={1.5} fill={color} />
+    </Svg>
   )
 }
 
@@ -325,6 +378,5 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: "#7c5cff",
   },
-  payBarIcon: { color: K.white, fontSize: 18 },
   payBarText: { color: K.white, fontSize: 16, fontWeight: "800" },
 })

@@ -32,6 +32,26 @@ function ChevronRight() {
 
 export const Contacts: ScreenRenderer = (ctx) => ({
   body: <ContactsBody ctx={ctx} />,
+  cta: (
+    <Pressable
+      onPress={() => ctx.push("chooseMode")}
+      accessibilityLabel="New payment"
+      style={({ pressed }) => [contactsCtaStyles.cta, pressed && { opacity: 0.92 }]}
+    >
+      <Text style={contactsCtaStyles.ctaText}>New payment</Text>
+    </Pressable>
+  ),
+})
+
+const contactsCtaStyles = StyleSheet.create({
+  cta: {
+    paddingVertical: 17,
+    borderRadius: 18,
+    backgroundColor: "#7c5cff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ctaText: { color: "#ffffff", fontSize: 16, fontWeight: "800" },
 })
 
 function ContactsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
@@ -154,7 +174,7 @@ function ContactsBody({ ctx }: { ctx: Parameters<ScreenRenderer>[0] }) {
           visible.map((c) => (
             <Pressable
               key={c.id}
-              onPress={() => ctx.push("intent")}
+              onPress={() => ctx.push("chooseMode")}
               onLongPress={() => onLongPress(c)}
               style={({ pressed }) => [styles.contactCard, pressed && { opacity: 0.92 }]}
             >

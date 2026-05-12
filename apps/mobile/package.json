@@ -24,6 +24,7 @@
     "expo": "^55.0.23",
     "expo-audio": "~55.0.14",
     "expo-background-task": "~55.0.17",
+    "expo-camera": "^55.0.18",
     "expo-clipboard": "~8.0.7",
     "expo-crypto": "^55.0.14",
     "expo-dev-client": "^55.0.32",
@@ -55,6 +56,7 @@
     "@types/base-64": "^1.0.2",
     "@types/react": "~19.1.0",
     "@types/text-encoding": "^0.0.40",
+    "babel-preset-expo": "^55.0.21",
     "typescript": "^5.5.4"
   }
 }

@@ -79,6 +79,7 @@ export async function appendHistory(entry: Omit<LocalHistoryEntry, "id" | "creat
     status: entry.status,
     sendTo: entry.sendTo,
     validator: entry.validator,
+    failureReason: entry.failureReason,
   }
   const existing = await readAll()
   await writeAll([next, ...existing.filter((e) => e.id !== next.id)])

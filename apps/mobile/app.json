@@ -22,7 +22,13 @@
       "expo-router",
       "expo-dev-client",
       "expo-background-task",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kumo uses the camera to scan offline payment intents (QR codes) shared by other Kumo users."
+        }
+      ]
     ]
   }
 }

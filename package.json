@@ -40,6 +40,9 @@
         "react-dom": "18",
         "@types/react": "18"
       }
+    },
+    "patchedDependencies": {
+      "whisper.rn@0.5.5": "patches/whisper.rn@0.5.5.patch"
     }
   }
 }

@@ -12,6 +12,9 @@ export type ConnectedWallet = {
   rawAddress: string
   publicKey: PublicKey
   label: string
+  /** Wallet app's base URI from MWA (e.g. "https://phantom.app"). Used to detect
+   *  the actual wallet brand — `label` is only the per-account name. */
+  walletUriBase: string | null
 }
 
 function addressToPublicKey(address: string): PublicKey {
@@ -52,6 +55,26 @@ export async function connectWallet(authToken?: string): Promise<ConnectedWallet
   try {
     return await transact(async (wallet) => {
       const auth = await authorize(wallet, authToken)
+      if (__DEV__) {
+        // Dev-only diagnostic: not every MWA wallet implementation populates
+        // wallet_uri_base, and label is often generic ("Main Wallet"). The
+        // dump helps narrow down which wallet brand connected.
+        console.log("[Kumo] MWA authorize response:", {
+          keys: Object.keys(auth),
+          wallet_uri_base: (auth as { wallet_uri_base?: unknown }).wallet_uri_base ?? null,
+          auth_token_prefix: auth.auth_token?.slice(0, 32) ?? null,
+          first_account: auth.accounts[0]
+            ? {
+                keys: Object.keys(auth.accounts[0]),
+                label: auth.accounts[0].label,
+                address_prefix: auth.accounts[0].address?.slice(0, 16),
+                icon: (auth.accounts[0] as { icon?: unknown }).icon ?? null,
+                chains: (auth.accounts[0] as { chains?: unknown }).chains ?? null,
+                features: (auth.accounts[0] as { features?: unknown }).features ?? null,
+              }
+            : null,
+        })
+      }
       const account = auth.accounts[0]
       if (!account) throw new Error("Wallet returned no accounts.")
       const publicKey = addressToPublicKey(account.address)
@@ -60,6 +83,7 @@ export async function connectWallet(authToken?: string): Promise<ConnectedWallet
         rawAddress: account.address,
         publicKey,
         label: account.label ?? "Mobile wallet",
+        walletUriBase: auth.wallet_uri_base ?? null,
       }
     })
   } catch (e) {

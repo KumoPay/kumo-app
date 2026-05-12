@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Pressable,
   ScrollView,
@@ -16,17 +17,20 @@ import bs58 from "bs58"
 import { Buffer } from "buffer"
 import { Transaction, VersionedTransaction, Connection } from "@solana/web3.js"
 import type { PaymentIntent } from "@kumo/shared"
+import { parseIntentPayload } from "@kumo/shared"
 
 import { K, SHADOW } from "./theme"
 import { BackButton } from "./atoms"
-import { ASSETS, walletLogoFor as walletLogoForBrand } from "./assets"
+import { ASSETS, brandFor, brandFromLabel, walletLogoFor as walletLogoForBrand } from "./assets"
 import { Connect } from "./Connect"
 import { ChooseAlias } from "./ChooseAlias"
+import { ChooseMode } from "./ChooseMode"
 import { Home } from "./Home"
 import { Intent } from "./Intent"
 import { Sign } from "./Sign"
 import { Queued } from "./Queued"
 import { Settled } from "./Settled"
+import { Scan } from "./Scan"
 import { Contacts } from "./Contacts"
 import { History } from "./History"
 import { Receive } from "./Receive"
@@ -40,6 +44,7 @@ import {
   PAY_FLOW,
   type NavCtx,
   type PaymentSettlement,
+  type QvacStreamState,
   type ScreenId,
   type ScreenRenderer,
   type WalletInfo,
@@ -62,7 +67,13 @@ import {
   buildPublicTransferWithNonce,
 } from "../lib/offline-build"
 import { privateTransferDirect } from "../lib/magicblock-direct"
-import { isLocalAIEnabled, isModelDownloaded, parseIntentLocal } from "../lib/qvac-local"
+import {
+  isLocalAIEnabled,
+  isModelDownloaded,
+  parseIntentLocal,
+  prewarmInference,
+} from "../lib/qvac-local"
+import { prewarmWhisper } from "../lib/whisper-local"
 import { parseIntentRegex } from "../lib/regex-parser"
 import { authenticateForAction, requireForSign } from "../lib/biometric"
 import { useConnection } from "../hooks/use-connection"
@@ -70,7 +81,12 @@ import { useNetwork } from "../hooks/use-network"
 import { useWalletAdapter } from "../hooks/use-wallet-adapter"
 import { MAGICBLOCK_TEE_RPC } from "../lib/config"
 import { registerBroadcastTask } from "../lib/background-broadcast"
-import { notifyPaymentFailed, notifyPaymentSent } from "../lib/notify"
+import {
+  clearAwaitingConnection,
+  notifyAwaitingConnection,
+  notifyPaymentFailed,
+  notifyPaymentSent,
+} from "../lib/notify"
 
 const SCREENS: Record<ScreenId, ScreenRenderer> = {
   home: Home,
@@ -83,10 +99,12 @@ const SCREENS: Record<ScreenId, ScreenRenderer> = {
   enableLocalAI: EnableLocalAI,
   enableWhisper: EnableWhisper,
   enableOfflinePay: EnableOfflinePay,
+  chooseMode: ChooseMode,
   intent: Intent,
   sign: Sign,
   queued: Queued,
   settled: Settled,
+  scan: Scan,
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -136,6 +154,11 @@ export function MobileShell() {
   const [settlement, setSettlement] = useState<PaymentSettlement | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [qvacStream, setQvacStream] = useState<QvacStreamState | null>(null)
+  // intent hashes currently being broadcast — guards against the auto-broadcast
+  // useEffect and a user tap on "Reconnect & broadcast" racing to send the same
+  // signed tx. Second caller is short-circuited.
+  const inflightHashesRef = useRef<Set<string>>(new Set())
 
   const { connection } = useConnection()
   const adapter = useWalletAdapter()
@@ -143,6 +166,8 @@ export function MobileShell() {
     publicKey,
     connected,
     label,
+    walletUriBase,
+    authToken,
     connect,
     disconnect,
     signMessage,
@@ -155,11 +180,25 @@ export function MobileShell() {
     void (async () => {
       const w = await readStoredWallet()
       if (w) {
-        setWallet(w)
+        // Migrate legacy entries that stored a generic brand (id "mobile"); re-derive
+        // from walletUriBase (preferred) or label. Won't be perfectly accurate for
+        // legacy records that lack walletUriBase — those need a reconnect to populate
+        // the field via authorize(). After that, future bootstraps are accurate.
+        const migrated =
+          w.brand === "mobile" || w.brand === w.id
+            ? { ...w, brand: brandFor({ walletUriBase: w.walletUriBase, label: w.label }) }
+            : w
+        setWallet(migrated)
       }
       setBootstrapped(true)
     })()
     void registerBroadcastTask()
+    // Pre-warm on-device inference contexts so the first parse / transcribe
+    // doesn't pay the cold-start cost (~500ms-1s for llama, ~200-400ms for
+    // whisper). Both are idempotent and no-op if the model isn't present.
+    // Fire-and-forget — bootstrap should not block on these.
+    void prewarmInference()
+    void prewarmWhisper()
   }, [])
 
   // After real MWA connect succeeds, sync wallet info + persist + advance.
@@ -170,10 +209,19 @@ export function MobileShell() {
       const next: WalletInfo = {
         id,
         label: label || "Mobile wallet",
-        brand: id,
+        brand: brandFor({ walletUriBase, authToken, label }),
         initial: (label || "M").charAt(0).toUpperCase(),
         pubkey: publicKey.toBase58(),
         displayName: prev?.displayName ?? "",
+        walletUriBase: walletUriBase ?? null,
+      }
+      if (__DEV__) {
+        console.log("[Kumo] wallet connected:", {
+          label,
+          walletUriBase,
+          derivedBrand: next.brand,
+          authTokenPrefix: authToken?.slice(0, 16),
+        })
       }
       void writeStoredWallet(next)
       return next
@@ -242,7 +290,7 @@ export function MobileShell() {
 
   const goToNewPayment = useCallback(() => {
     setDirection(1)
-    setStack(["home", "intent"])
+    setStack(["home", "chooseMode"])
     setParsedIntent(null)
     setIntentHash(null)
     setOfflineSig(null)
@@ -298,6 +346,7 @@ export function MobileShell() {
   const parseIntent = useCallback(async () => {
     setError(null)
     setBusy(true)
+    setQvacStream(null)
     try {
       const text = intentText.trim()
       let intent: PaymentIntent | null = null
@@ -306,7 +355,14 @@ export function MobileShell() {
       const useLocal = (await isLocalAIEnabled()) && (await isModelDownloaded())
       if (useLocal) {
         try {
-          intent = await parseIntentLocal(text)
+          intent = await parseIntentLocal(text, (ev) => {
+            setQvacStream({
+              tokenCount: ev.tokenCount,
+              tokensPerSec: ev.tokensPerSec,
+              elapsedMs: ev.elapsedMs,
+              text: ev.text,
+            })
+          })
         } catch (e) {
           console.warn("local parse failed, falling through:", e)
         }
@@ -325,8 +381,8 @@ export function MobileShell() {
         )
       }
 
-      // The intent's `private` field is now decided by the UI toggle, not just the wording.
-      // The toggle's default is `true` (MagicBlock private). User can flip to public anytime.
+      // The UI toggle overrides whatever `private` value the parser inferred
+      // from the wording — the toggle is the source of truth.
       intent = { ...intent, private: privacyDefault }
       setParsedIntent(intent)
       const canonical = JSON.stringify({
@@ -345,6 +401,9 @@ export function MobileShell() {
       setError(e instanceof Error ? e.message : "parse failed")
     } finally {
       setBusy(false)
+      // Hold the final stream snapshot briefly so the user can read the final
+      // token count and tokens/sec before the panel disappears.
+      setTimeout(() => setQvacStream(null), 1200)
     }
   }, [intentText, privacyDefault])
 
@@ -391,11 +450,18 @@ export function MobileShell() {
       let signedTxBase64: string | undefined
       let txVersion: "legacy" | "v0" | undefined
       let sendTo: "base" | "ephemeral" | undefined
+      let offlineSetup: Awaited<ReturnType<typeof getNonceSetup>> | null = null
       if (!network.online) {
-        const setup = await getNonceSetup()
+        offlineSetup = await getNonceSetup()
+        const setup = offlineSetup
         if (!setup?.cached?.value) {
           throw new Error(
             "You're offline and offline payments aren't set up yet. Reconnect to set up, or try again online.",
+          )
+        }
+        if (setup.authority !== publicKey.toBase58()) {
+          throw new Error(
+            `Offline-pay was set up for wallet ${setup.authority.slice(0, 4)}…${setup.authority.slice(-4)} and the on-chain nonce only accepts signatures from that wallet. Reconnect that wallet, or reset offline-pay in New Payment to set up fresh.`,
           )
         }
         const recipientPubkey = await resolveRecipientToPubkey(parsedIntent.recipient)
@@ -435,7 +501,16 @@ export function MobileShell() {
         signedTxBase64,
         txVersion,
         sendTo,
+        noncePubkey: offlineSetup?.noncePubkey,
+        nonceValue: offlineSetup?.cached?.value,
       })
+      if (!network.online) {
+        void notifyAwaitingConnection({
+          amountUsdc: parsedIntent.amount_usdc,
+          recipient: parsedIntent.recipient,
+          intentHash,
+        })
+      }
       setDirection(1)
       setStack((s) => [...s, "queued"])
     } catch (e) {
@@ -455,8 +530,14 @@ export function MobileShell() {
       setError("You're offline. Connect to a network to broadcast.")
       return
     }
+    if (intentHash && inflightHashesRef.current.has(intentHash)) {
+      // Auto-broadcast already in flight for this intent. Don't fire a second
+      // sendRawTransaction — the first will land or fail on its own.
+      return
+    }
     setError(null)
     setBusy(true)
+    if (intentHash) inflightHashesRef.current.add(intentHash)
     try {
       // Fast path: a pre-signed offline tx is already queued for THIS intent.
       // No biometric, no rebuild, no resign — just submit.
@@ -513,6 +594,7 @@ export function MobileShell() {
           status: "queued",
           sendTo: preSigned.sendTo,
         })
+        if (intentHash) void clearAwaitingConnection(intentHash)
         void notifyPaymentSent({
           amountUsdc: parsedIntent.amount_usdc,
           recipient: parsedIntent.recipient,
@@ -653,6 +735,7 @@ export function MobileShell() {
       if (!/cancel|reject/i.test(msg)) setError(msg)
     } finally {
       setBusy(false)
+      if (intentHash) inflightHashesRef.current.delete(intentHash)
     }
   }, [
     parsedIntent,
@@ -665,93 +748,184 @@ export function MobileShell() {
     intentHash,
   ])
 
+  // Broadcast someone else's offline-signed intent (scanned QR or pasted URI).
+  // The chain enforces the original signer's signature; this device is just a relay.
+  const relayIntent = useCallback(
+    async (payloadUri: string): Promise<string> => {
+      const payload = parseIntentPayload(payloadUri)
+      if (!payload.signedTx) {
+        throw new Error("Intent has no signed transaction — cannot relay.")
+      }
+      const txBytes = Buffer.from(payload.signedTx, "base64")
+      const conn =
+        payload.sendTo === "ephemeral"
+          ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
+          : connection
+      const signature = await conn.sendRawTransaction(txBytes)
+      const entry = await appendHistory({
+        direction: "out",
+        counterparty: payload.intent.recipient,
+        amount: payload.intent.amount_usdc,
+        signature,
+        status: "queued",
+        sendTo: payload.sendTo ?? "base",
+      })
+      void awaitConfirmation({ signature, sendTo: payload.sendTo ?? "base" }).then((res) => {
+        if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
+        else
+          void updateHistoryStatus(entry.id, {
+            status: "failed",
+            failureReason: res.error,
+          })
+      })
+      return signature
+    },
+    [connection],
+  )
+
   const ctx: NavCtx = useMemo(
     () => ({
       push, back, resetHome, goToNewPayment, airplane, setAirplane,
       privacyDefault, setPrivacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, setIntentText, parsedIntent, intentHash, offlineSig, settlement,
-      busy, error, parseIntent, signOffline, broadcast,
+      busy, error, qvacStream, parseIntent, signOffline, broadcast, relayIntent,
       signTransactionRaw: signTransaction,
     }),
     [
       push, back, resetHome, goToNewPayment, airplane, privacyDefault,
       wallet, beginWalletConnect, disconnectWallet, completeAliasOnboarding,
       intentText, parsedIntent, intentHash, offlineSig, settlement,
-      busy, error, parseIntent, signOffline, broadcast,
+      busy, error, qvacStream, parseIntent, signOffline, broadcast, relayIntent,
       signTransaction,
     ],
   )
 
-  // Auto-broadcast: when network flips false → true and we have pre-signed
-  // intents queued, drain them in the background. Updates history live via the
-  // confirmation poller; user sees status pill flip from pending → delivered.
+  // Auto-broadcast: drain any pre-signed queued intents and update history
+  // live. Called from two triggers: (1) the network flipping offline → online
+  // while the app is foregrounded; (2) the app coming back to foreground from
+  // background, where the OS may have reconnected the network without firing
+  // a NetInfo event we received. Both call the same drainer; the in-flight
+  // lock prevents the two from racing each other.
+  const drainQueue = useCallback(async () => {
+    if (!publicKey || !network.online) return
+    const setup = await getNonceSetup()
+    if (setup?.noncePubkey) {
+      await refreshNonceFromChain({
+        connection,
+        noncePubkey: setup.noncePubkey,
+      }).catch(() => {})
+    }
+    const queue = await listQueue()
+    const mine = queue.filter(
+      (q) => q.signedTxBase64 && q.signerPubkey === publicKey.toBase58(),
+    )
+    for (const q of mine) {
+      // Same intent might already be in flight via a user tap on the Queued
+      // screen's "Reconnect & broadcast" button. Skip — first caller wins.
+      if (q.intentHash && inflightHashesRef.current.has(q.intentHash)) continue
+      if (q.intentHash) inflightHashesRef.current.add(q.intentHash)
+      try {
+        const txBytes = Buffer.from(q.signedTxBase64!, "base64")
+        const conn =
+          q.sendTo === "ephemeral"
+            ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
+            : connection
+        const signature = await conn.sendRawTransaction(txBytes)
+        const entry = await appendHistory({
+          direction: "out",
+          counterparty: q.intent.recipient,
+          amount: q.intent.amount_usdc,
+          signature,
+          status: "queued",
+          sendTo: q.sendTo ?? "base",
+        })
+        await removeFromQueue(q.id)
+        if (q.intentHash) void clearAwaitingConnection(q.intentHash)
+        void notifyPaymentSent({
+          amountUsdc: q.intent.amount_usdc,
+          recipient: q.intent.recipient,
+          signature,
+        })
+        // If the user is currently staring at the Queued screen for this
+        // exact intent, push them to Settled so they don't see a stale
+        // "Reconnect & broadcast" CTA — and so they can't double-trigger
+        // a broadcast they don't realize already landed.
+        if (q.intentHash && q.intentHash === intentHash) {
+          setSettlement({ signature, sendTo: q.sendTo ?? "base" })
+          setDirection(1)
+          setStack((s) =>
+            s[s.length - 1] === "queued" ? [...s, "settled"] : s,
+          )
+        }
+        void awaitConfirmation({ signature, sendTo: q.sendTo ?? "base" }).then((res) => {
+          if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
+          else
+            void updateHistoryStatus(entry.id, {
+              status: "failed",
+              failureReason: res.error,
+            })
+        })
+        // A successful public-rail broadcast advances the durable nonce on
+        // chain. Refresh the cache before the next iteration so any
+        // remaining queue entry signed against the *previous* value gets
+        // flagged stale by the local check instead of silently failing.
+        if (q.sendTo !== "ephemeral" && setup?.noncePubkey) {
+          await refreshNonceFromChain({
+            connection,
+            noncePubkey: setup.noncePubkey,
+          }).catch(() => {})
+        }
+      } catch (e) {
+        console.warn("auto-broadcast failed for", q.id, e)
+        const reason = e instanceof Error ? e.message : String(e)
+        // Stale durable nonce means the pre-signed tx is permanently invalid.
+        // Drop it from the queue so the user can re-sign cleanly, and leave
+        // a "failed" history row so the demo / debug surface shows what
+        // happened instead of the intent silently disappearing.
+        if (/Blockhash not found|nonce/i.test(reason)) {
+          await removeFromQueue(q.id)
+          if (q.intentHash) void clearAwaitingConnection(q.intentHash)
+          await appendHistory({
+            direction: "out",
+            counterparty: q.intent.recipient,
+            amount: q.intent.amount_usdc,
+            signature: `expired_${q.id}`,
+            status: "failed",
+            sendTo: q.sendTo ?? "base",
+            failureReason: "Durable nonce expired before broadcast",
+          }).catch(() => {})
+        }
+        void notifyPaymentFailed({
+          amountUsdc: q.intent.amount_usdc,
+          recipient: q.intent.recipient,
+          reason,
+        })
+      } finally {
+        if (q.intentHash) inflightHashesRef.current.delete(q.intentHash)
+      }
+    }
+  }, [network.online, publicKey, connection, intentHash])
+
+  // Trigger 1: network flipped offline → online while app is foregrounded.
   const wasOnlineRef = useRef(network.online)
   useEffect(() => {
     const wasOnline = wasOnlineRef.current
     wasOnlineRef.current = network.online
-    if (wasOnline || !network.online || !publicKey) return
-    void (async () => {
-      // Keep the cached nonce fresh so the next offline-sign uses a value the
-      // chain still recognizes when we eventually broadcast.
-      const setup = await getNonceSetup()
-      if (setup?.noncePubkey) {
-        await refreshNonceFromChain({
-          connection,
-          noncePubkey: setup.noncePubkey,
-        }).catch(() => {})
-      }
-      const queue = await listQueue()
-      const mine = queue.filter(
-        (q) => q.signedTxBase64 && q.signerPubkey === publicKey.toBase58(),
-      )
-      for (const q of mine) {
-        try {
-          const txBytes = Buffer.from(q.signedTxBase64!, "base64")
-          const conn =
-            q.sendTo === "ephemeral"
-              ? new Connection(MAGICBLOCK_TEE_RPC, "confirmed")
-              : connection
-          const signature = await conn.sendRawTransaction(txBytes)
-          const entry = await appendHistory({
-            direction: "out",
-            counterparty: q.intent.recipient,
-            amount: q.intent.amount_usdc,
-            signature,
-            status: "queued",
-            sendTo: q.sendTo ?? "base",
-          })
-          await removeFromQueue(q.id)
-          void notifyPaymentSent({
-            amountUsdc: q.intent.amount_usdc,
-            recipient: q.intent.recipient,
-            signature,
-          })
-          void awaitConfirmation({ signature, sendTo: q.sendTo ?? "base" }).then((res) => {
-            if (res.ok) void updateHistoryStatus(entry.id, { status: "delivered" })
-            else
-              void updateHistoryStatus(entry.id, {
-                status: "failed",
-                failureReason: res.error,
-              })
-          })
-        } catch (e) {
-          console.warn("auto-broadcast failed for", q.id, e)
-          const reason = e instanceof Error ? e.message : String(e)
-          // Stale durable nonce means the pre-signed tx is permanently invalid.
-          // Drop it from the queue so the user can re-sign cleanly.
-          if (/Blockhash not found|nonce/i.test(reason)) {
-            await removeFromQueue(q.id)
-          }
-          void notifyPaymentFailed({
-            amountUsdc: q.intent.amount_usdc,
-            recipient: q.intent.recipient,
-            reason,
-          })
-        }
-      }
-    })()
-  }, [network.online, publicKey, connection])
+    if (wasOnline || !network.online) return
+    void drainQueue()
+  }, [network.online, drainQueue])
+
+  // Trigger 2: app coming back to foreground. Network may have reconnected
+  // while we were backgrounded (Android doesn't reliably deliver NetInfo
+  // events to a sleeping JS thread). Fire drain unconditionally on resume —
+  // the in-flight lock + empty-queue early-return keep it safe.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void drainQueue()
+    })
+    return () => sub.remove()
+  }, [drainQueue])
 
   const slots = SCREENS[current](ctx)
 

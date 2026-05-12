@@ -59,6 +59,77 @@ export async function isNonceReady(): Promise<boolean> {
   return Boolean(setup?.cached?.value)
 }
 
+/**
+ * If the locally-cached nonce account was set up by a different wallet than
+ * the one currently connected, return the cached authority. Returns null
+ * when the nonce belongs to the connected wallet, or when no nonce is set
+ * up yet.
+ *
+ * The nonce account's on-chain `authority` is what gates `nonceAdvance` —
+ * only that wallet can sign a tx that consumes the nonce. Trying to sign
+ * with a different wallet produces a tx Solana will reject on broadcast.
+ * Detecting the mismatch locally lets us block the bad sign attempt and
+ * prompt the user before they queue an unbroadcastable intent.
+ */
+export async function getWalletNonceMismatch(
+  connectedPubkey: string | null,
+): Promise<{ cachedAuthority: string; cachedNoncePubkey: string } | null> {
+  if (!connectedPubkey) return null
+  const setup = await getNonceSetup()
+  if (!setup) return null
+  if (setup.authority === connectedPubkey) return null
+  return { cachedAuthority: setup.authority, cachedNoncePubkey: setup.noncePubkey }
+}
+
+export type LocalNonceStatus =
+  | { ready: true; value: string; ageMs: number; queueDepth: 0 }
+  | {
+      ready: false
+      reason: "no-setup" | "no-cache" | "queue-conflict"
+      value: string | null
+      ageMs: number | null
+      /** Number of queued, unbroadcast intents already signed against the cached value. */
+      queueDepth: number
+    }
+
+/**
+ * Decide whether the locally-cached nonce can be safely used to sign a new
+ * offline intent — without making a network call. The cached value is the
+ * authoritative on-chain nonce *as of the last refresh*; only the wallet
+ * (sole `authority`) can advance it. So the only way a cached nonce
+ * becomes stale locally is if we ourselves enqueue an unbroadcast intent
+ * against it — the next intent signed against the same value would
+ * conflict when the first one broadcasts.
+ */
+export async function getLocalNonceStatus(opts: {
+  /** Currently-queued intents (output of `listQueue()`). Pass it in so this
+   *  module doesn't take a screen-store dependency. */
+  queue: Array<{ noncePubkey?: string; nonceValue?: string }>
+}): Promise<LocalNonceStatus> {
+  const setup = await getNonceSetup()
+  if (!setup) {
+    return { ready: false, reason: "no-setup", value: null, ageMs: null, queueDepth: 0 }
+  }
+  const cached = setup.cached
+  if (!cached?.value) {
+    return { ready: false, reason: "no-cache", value: null, ageMs: null, queueDepth: 0 }
+  }
+  const ageMs = Date.now() - cached.refreshedAt
+  const queueDepth = opts.queue.filter(
+    (q) => q.noncePubkey === setup.noncePubkey && q.nonceValue === cached.value,
+  ).length
+  if (queueDepth > 0) {
+    return {
+      ready: false,
+      reason: "queue-conflict",
+      value: cached.value,
+      ageMs,
+      queueDepth,
+    }
+  }
+  return { ready: true, value: cached.value, ageMs, queueDepth: 0 }
+}
+
 export async function clearNonce(): Promise<void> {
   await AsyncStorage.multiRemove([
     KEY_NONCE_PUBKEY,
