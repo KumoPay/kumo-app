@@ -1,16 +1,7 @@
 import { z } from "zod"
 
-// --- PaymentIntent --------------------------------------------------------
-// Output of QVAC's natural-language → structured intent parser.
-// Kept tiny on purpose: any extra field would just give the LLM more rope.
-
-export const PaymentIntentSchema = z.object({
-  recipient: z.string().min(1).max(64), // either a base58 pubkey OR a label like "alice" we resolve from a local contact map
-  amount_usdc: z.number().positive().max(1_000_000),
-  private: z.boolean(),
-  memo: z.string().max(120).optional(),
-})
-export type PaymentIntent = z.infer<typeof PaymentIntentSchema>
+export * from "./payment-intent"
+import { PaymentIntentSchema, type PaymentIntent } from "./payment-intent"
 
 // --- SignedOfflineTx ------------------------------------------------------
 // What the offline signer hands to the broadcast endpoint after reconnect.
@@ -93,3 +84,5 @@ export function hashIntent(intent: PaymentIntent): Promise<string> {
       .join("")
   })
 }
+
+export * from "./intent-payload"
