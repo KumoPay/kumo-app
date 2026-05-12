@@ -2,7 +2,12 @@
 
 # Kumo
 
-**Offline-first USDC payments for Solana Mobile: sign now, queue locally, and settle when connectivity returns.**
+**Kumo is a stablecoin payment rail that keeps working when the signal drops.**
+**Offline · Confidential · Auditable.**
+
+> *Pay when the signal disappears.*
+
+**▶️ [3-min demo](https://www.loom.com/share/REPLACE_WITH_LOOM_ID)** · **[YouTube backup](https://youtu.be/REPLACE_WITH_YOUTUBE_ID)**
 
 ![Solana](https://img.shields.io/badge/platform-Solana-9945FF?logo=solana&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -11,9 +16,20 @@
 ![Next.js](https://img.shields.io/badge/web-Next.js%2015-000000?logo=next.js&logoColor=white)
 ![License](https://img.shields.io/badge/license-Unlicensed-lightgrey?logo=github)
 
-[Live Demo](https://www.kumoapp.xyz) · [API Reference](#api-endpoints) · [Quick Start](#quick-start) · [Security Model](#security-model)
+[Live Demo](https://www.kumoapp.xyz) · [Verify it's real](#verify-its-real) · [API Reference](#api-endpoints) · [Quick Start](#quick-start) · [Security Model](#security-model)
 
 </div>
+
+---
+
+## Verify it's real
+
+| Artifact | Link |
+| --- | --- |
+| Devnet program (intent-receipt) | [`8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6`](https://solscan.io/account/8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6?cluster=devnet) |
+| Sample settled private transfer | [Solscan signature](https://solscan.io/tx/REPLACE_WITH_TX_SIGNATURE?cluster=devnet) — the public chain shows only `nonceAdvance` and a 1-lamport placeholder; recipient and amount are sealed inside the rollup |
+| Mobile APK | [`kumo-mobile.apk`](./kumo-mobile.apk) (Android, devnet build) |
+| Live web demo | [www.kumoapp.xyz](https://www.kumoapp.xyz) |
 
 ---
 

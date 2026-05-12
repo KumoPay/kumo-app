@@ -4,4 +4,4 @@
  */
 export const ANDROID_PLAY_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL?.trim() ||
-  "https://r2.solanamobiledappstore.com/a/03fd9c0b136a173bde8cc52bb963e3c4ffe9baf65413fdc01d4574bea17df090.apk"
+  "https://r2.solanamobiledappstore.com/a/e5a8e5cd1a11230f89347839fca4bbd89cabadaab2e824c74d188567d0a1621c.apk"
