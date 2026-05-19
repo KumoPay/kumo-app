@@ -7,7 +7,7 @@
 
 > *Pay when the signal disappears.*
 
-**▶️ [3-min demo](https://www.loom.com/share/REPLACE_WITH_LOOM_ID)** · **[YouTube backup](https://youtu.be/REPLACE_WITH_YOUTUBE_ID)**
+**▶️ [Try the live demo](https://www.kumoapp.xyz)** · **[Download Android APK](./kumo-mobile.apk)**
 
 ![Solana](https://img.shields.io/badge/platform-Solana-9945FF?logo=solana&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -27,7 +27,7 @@
 | Artifact | Link |
 | --- | --- |
 | Devnet program (intent-receipt) | [`8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6`](https://solscan.io/account/8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6?cluster=devnet) |
-| Sample settled private transfer | [Solscan signature](https://solscan.io/tx/REPLACE_WITH_TX_SIGNATURE?cluster=devnet) — the public chain shows only `nonceAdvance` and a 1-lamport placeholder; recipient and amount are sealed inside the rollup |
+| Private-transfer confidentiality | The [intent-receipt program](https://solscan.io/account/8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6?cluster=devnet) records a commit/settlement hash on-chain; a settled private transfer surfaces only a `nonceAdvance` and a 1-lamport placeholder on the public chain — recipient and amount stay sealed inside the rollup |
 | Mobile APK | [`kumo-mobile.apk`](./kumo-mobile.apk) (Android, devnet build) |
 | Live web demo | [www.kumoapp.xyz](https://www.kumoapp.xyz) |
 
