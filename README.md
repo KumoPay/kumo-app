@@ -7,7 +7,7 @@
 
 > *Pay when the signal disappears.*
 
-**▶️ [Try the live demo](https://www.kumoapp.xyz)** · **[Download Android APK](./kumo-mobile.apk)**
+**▶️ [Watch the demo](https://www.youtube.com/watch?v=i86H1WrrmKw)** · **[Try the live app](https://www.kumoapp.xyz)** · **[Get it on the Solana dApp Store](https://r2.solanamobiledappstore.com/a/e5a8e5cd1a11230f89347839fca4bbd89cabadaab2e824c74d188567d0a1621c.apk)**
 
 ![Solana](https://img.shields.io/badge/platform-Solana-9945FF?logo=solana&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -28,7 +28,7 @@
 | --- | --- |
 | Devnet program (intent-receipt) | [`8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6`](https://solscan.io/account/8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6?cluster=devnet) |
 | Private-transfer confidentiality | The [intent-receipt program](https://solscan.io/account/8ttk7xy5Xyg7FUBeZ5Ztdck6Uwm9RdXoCcxgNoTSR7M6?cluster=devnet) records a commit/settlement hash on-chain; a settled private transfer surfaces only a `nonceAdvance` and a 1-lamport placeholder on the public chain — recipient and amount stay sealed inside the rollup |
-| Mobile APK | [`kumo-mobile.apk`](./kumo-mobile.apk) (Android, devnet build) |
+| Mobile APK | [Android build](https://r2.solanamobiledappstore.com/a/e5a8e5cd1a11230f89347839fca4bbd89cabadaab2e824c74d188567d0a1621c.apk) — distributed through the Solana Mobile dApp Store (devnet) |
 | Live web demo | [www.kumoapp.xyz](https://www.kumoapp.xyz) |
 
 ---
