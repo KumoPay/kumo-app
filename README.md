@@ -14,7 +14,7 @@
 ![Node.js](https://img.shields.io/badge/runtime-Node.js%2020+-339933?logo=node.js&logoColor=white)
 ![Expo](https://img.shields.io/badge/mobile-Expo%2055-000020?logo=expo&logoColor=white)
 ![Next.js](https://img.shields.io/badge/web-Next.js%2015-000000?logo=next.js&logoColor=white)
-![License](https://img.shields.io/badge/license-Unlicensed-lightgrey?logo=github)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue?logo=apache&logoColor=white)
 
 [Live Demo](https://www.kumoapp.xyz) · [Verify it's real](#verify-its-real) · [API Reference](#api-endpoints) · [Quick Start](#quick-start) · [Security Model](#security-model)
 

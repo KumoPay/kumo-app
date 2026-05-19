@@ -2,6 +2,7 @@
   "name": "kumo",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Offline-first confidential cross-chain USDC payments. QVAC + MagicBlock PER + LI.FI + Solana durable nonces.",
   "scripts": {
     "dev": "pnpm --filter web dev",

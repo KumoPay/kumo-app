@@ -2,6 +2,7 @@
   "name": "@kumo/intent-receipt-tests",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "build": "echo 'Run: anchor build' && exit 0",
     "test": "vitest run",
